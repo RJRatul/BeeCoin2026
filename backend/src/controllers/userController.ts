@@ -29,3 +29,25 @@ export const updateUserBalance = async (req: AuthRequest, res: Response): Promis
     res.status(500).json({ message: error.message });
   }
 };
+
+export const suspendUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    const user = await User.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    ).select('-password');
+    
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+    
+    res.json({ success: true, user });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
