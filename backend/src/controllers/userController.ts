@@ -11,7 +11,33 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
-export const updateUserBalance = async (req: AuthRequest, res: Response): Promise<void> => {
+// Update balance for any user (Admin only)
+export const updateUserBalance = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { balance } = req.body;
+    
+    console.log('Updating user balance:', { id, balance });
+    
+    const user = await User.findById(id);
+    
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    user.balance = balance;
+    await user.save();
+
+    res.json({ success: true, balance: user.balance, user: { id: user._id, name: user.name, balance: user.balance } });
+  } catch (error: any) {
+    console.error('Error updating balance:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Update current user's own balance (if needed)
+export const updateMyBalance = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { amount } = req.body;
     const user = await User.findById(req.user?._id);
@@ -31,6 +57,28 @@ export const updateUserBalance = async (req: AuthRequest, res: Response): Promis
 };
 
 export const suspendUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    const user = await User.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    ).select('-password');
+    
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+    
+    res.json({ success: true, user });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const updateUserStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const { status } = req.body;
