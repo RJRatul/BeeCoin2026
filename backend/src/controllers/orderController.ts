@@ -111,7 +111,7 @@ export const checkOpenOrders = async (): Promise<void> => {
   try {
     const openOrders = await Order.find({ status: 'open' });
     
-    console.log(`Checking ${openOrders.length} open orders...`);
+    console.log(`[${new Date().toISOString()}] Checking ${openOrders.length} open orders...`);
     
     for (const order of openOrders) {
       const pair = await Pair.findById(order.pairId);
@@ -121,7 +121,7 @@ export const checkOpenOrders = async (): Promise<void> => {
         order.status = 'closed';
         order.closedAt = new Date();
         await order.save();
-        console.log(`Order ${order._id} closed due to pair inactivity - User lost $${order.amount}`);
+        console.log(`[${new Date().toISOString()}] Order ${order._id} closed due to pair inactivity - User lost $${order.amount}`);
         continue;
       }
       
@@ -129,16 +129,22 @@ export const checkOpenOrders = async (): Promise<void> => {
       let targetReached = false;
       let profit = 0;
       
-      if (order.type === 'buy' && pair.currentValue <= order.targetPrice) {
-        targetReached = true;
-        // Calculate profit: (entryPrice - targetPrice) * (amount / entryPrice)
-        profit = (order.price - order.targetPrice) * (order.amount / order.price);
-        console.log(`Buy order ${order._id} target reached! Entry: $${order.price}, Target: $${order.targetPrice}, Current: $${pair.currentValue}, Profit: $${profit}`);
-      } else if (order.type === 'sell' && pair.currentValue >= order.targetPrice) {
-        targetReached = true;
-        // Calculate profit: (targetPrice - entryPrice) * (amount / entryPrice)
-        profit = (order.targetPrice - order.price) * (order.amount / order.price);
-        console.log(`Sell order ${order._id} target reached! Entry: $${order.price}, Target: $${order.targetPrice}, Current: $${pair.currentValue}, Profit: $${profit}`);
+      if (order.type === 'buy') {
+        // For BUY order: target reached when current price drops to or below target price
+        if (pair.currentValue <= order.targetPrice) {
+          targetReached = true;
+          // Calculate profit: (entryPrice - targetPrice) * (amount / entryPrice)
+          profit = (order.price - order.targetPrice) * (order.amount / order.price);
+          console.log(`[${new Date().toISOString()}] BUY Order ${order._id} target reached! Entry: $${order.price}, Target: $${order.targetPrice}, Current: $${pair.currentValue}, Profit: $${profit.toFixed(2)}`);
+        }
+      } else if (order.type === 'sell') {
+        // For SELL order: target reached when current price rises to or above target price
+        if (pair.currentValue >= order.targetPrice) {
+          targetReached = true;
+          // Calculate profit: (targetPrice - entryPrice) * (amount / entryPrice)
+          profit = (order.targetPrice - order.price) * (order.amount / order.price);
+          console.log(`[${new Date().toISOString()}] SELL Order ${order._id} target reached! Entry: $${order.price}, Target: $${order.targetPrice}, Current: $${pair.currentValue}, Profit: $${profit.toFixed(2)}`);
+        }
       }
       
       if (targetReached && profit > 0) {
@@ -146,13 +152,13 @@ export const checkOpenOrders = async (): Promise<void> => {
         if (user) {
           user.balance += profit;
           await user.save();
-          console.log(`Added $${profit} profit to user ${user.email}. New balance: $${user.balance}`);
+          console.log(`[${new Date().toISOString()}] Added $${profit.toFixed(2)} profit to user ${user.email}. New balance: $${user.balance.toFixed(2)}`);
         }
         
         order.status = 'closed';
         order.closedAt = new Date();
         await order.save();
-        console.log(`Order ${order._id} closed successfully with profit: $${profit}`);
+        console.log(`[${new Date().toISOString()}] Order ${order._id} closed successfully with profit: $${profit.toFixed(2)}`);
       }
     }
   } catch (error) {

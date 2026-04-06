@@ -4,24 +4,11 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import axios from 'axios';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePrice } from '@/contexts/PriceContext';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
 import { FaArrowLeft, FaChevronDown } from 'react-icons/fa';
 import PrivateLayout from '@/layouts/PrivateLayout';
-
-interface Pair {
-  _id: string;
-  name: string;
-  symbol: string;
-  image: string;
-  currentValue: number;
-  minValue: number;
-  maxValue: number;
-  minPercentage: number;
-  maxPercentage: number;
-  isRecommended: boolean;
-  isActive: boolean;
-}
 
 interface Order {
   _id: string;
@@ -47,7 +34,8 @@ export default function TradePairPage() {
   const { symbol } = useParams();
   const router = useRouter();
   const { user, token, refreshUser } = useAuth();
-  const [pair, setPair] = useState<Pair | null>(null);
+  const { getPairBySymbol } = usePrice();
+  const [pair, setPair] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
@@ -65,35 +53,24 @@ export default function TradePairPage() {
       router.push('/login');
       return;
     }
-    fetchPair();
-    fetchOpenOrder();
-    startPriceUpdates();
-  }, [symbol]);
-
-  const fetchPair = async () => {
-    try {
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/pairs`);
-      const foundPair = response.data.pairs.find((p: Pair) => p.symbol === symbol);
-      if (foundPair) {
-        // Check if pair is active
-        if (!foundPair.isActive || (foundPair.minValue === 0 && foundPair.maxValue === 0)) {
-          toast.error('This trading pair is no longer available');
-          router.push('/trade');
-          return;
-        }
-        setPair(foundPair);
-        generateMarketDepth(foundPair);
-      } else {
-        toast.error('Pair not found');
+    
+    const foundPair = getPairBySymbol(symbol as string);
+    if (foundPair) {
+      if (!foundPair.isActive || (foundPair.minValue === 0 && foundPair.maxValue === 0)) {
+        toast.error('This trading pair is no longer available');
         router.push('/trade');
+        return;
       }
-    } catch (error) {
-      console.error('Error fetching pair:', error);
-      toast.error('Failed to fetch pair data');
-    } finally {
-      setLoading(false);
+      setPair(foundPair);
+      generateMarketDepth(foundPair);
+    } else {
+      toast.error('Pair not found');
+      router.push('/trade');
     }
-  };
+    setLoading(false);
+    
+    fetchOpenOrder();
+  }, [symbol, getPairBySymbol]);
 
   const fetchOpenOrder = async () => {
     try {
@@ -118,7 +95,7 @@ export default function TradePairPage() {
     }
   };
 
-  const generateMarketDepth = (pair: Pair) => {
+  const generateMarketDepth = (pair: any) => {
     const { currentValue, minValue, maxValue } = pair;
     const depth: MarketDepth[] = [];
     
@@ -133,36 +110,6 @@ export default function TradePairPage() {
       }
     }
     setMarketDepth(depth.sort((a, b) => b.price - a.price));
-  };
-
-  const startPriceUpdates = () => {
-    const interval = setInterval(async () => {
-      if (pair) {
-        try {
-          const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/pairs`);
-          const updatedPair = response.data.pairs.find((p: Pair) => p.symbol === symbol);
-          if (updatedPair) {
-            // Check if pair became inactive
-            if (!updatedPair.isActive || (updatedPair.minValue === 0 && updatedPair.maxValue === 0)) {
-              toast.error('This trading pair has been deactivated');
-              router.push('/trade');
-              clearInterval(interval);
-              return;
-            }
-            setPair(updatedPair);
-            generateMarketDepth(updatedPair);
-            
-            // Refresh open order status
-            await fetchOpenOrder();
-            await refreshUserBalance();
-          }
-        } catch (error) {
-          console.error('Error updating price:', error);
-        }
-      }
-    }, 3000);
-
-    return () => clearInterval(interval);
   };
 
   const handleSubmitOrder = async () => {
@@ -252,7 +199,7 @@ export default function TradePairPage() {
     <PrivateLayout>
       <div className="min-h-screen bg-gradient-to-br from-gray-900 to-black p-4">
         <div className="max-w-md mx-auto">
-          {/* Header */}
+          {/* Header - Same as before */}
           <div className="flex items-center justify-between mb-6">
             <button
               onClick={() => router.back()}
@@ -281,6 +228,7 @@ export default function TradePairPage() {
             </div>
           </div>
 
+          {/* Rest of the component remains the same */}
           {/* Balance Display */}
           <div className="bg-gray-800/50 rounded-xl p-4 mb-4">
             <div className="flex justify-between items-center">

@@ -35,7 +35,7 @@ app.use(cors({
       callback(null, true);
     } else {
       console.log('Origin blocked:', origin);
-      callback(null, true); // Allow all in development
+      callback(null, true);
     }
   },
   credentials: true,
@@ -55,7 +55,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/pairs', pairRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api', uploadRoutes); // Upload routes
+app.use('/api', uploadRoutes);
 app.use('/api/orders', orderRoutes);
 
 // Error Handler
@@ -72,8 +72,8 @@ mongoose.connect(process.env.MONGODB_URI as string)
       console.log(`CORS enabled for development`);
     });
     
-    // Schedule cron job to check open orders every 10 seconds
-    cron.schedule('*/10 * * * * *', async () => {
+    // Schedule cron job to check open orders every 5 seconds (more frequent)
+    cron.schedule('*/5 * * * * *', async () => {
       try {
         await checkOpenOrders();
       } catch (error) {
@@ -81,12 +81,12 @@ mongoose.connect(process.env.MONGODB_URI as string)
       }
     });
     
-    console.log('Order checking cron job scheduled (every 10 seconds)');
+    console.log('Order checking cron job scheduled (every 5 seconds)');
     
     // Initial check on startup
     setTimeout(async () => {
       await checkOpenOrders();
-    }, 5000);
+    }, 2000);
     
   })
   .catch((error) => {

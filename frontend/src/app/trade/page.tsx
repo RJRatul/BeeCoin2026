@@ -1,149 +1,43 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePrice } from '@/contexts/PriceContext';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import toast from 'react-hot-toast';
 import { FaArrowDown, FaQrcode, FaChevronDown, FaChevronUp } from 'react-icons/fa';
 import PrivateLayout from '@/layouts/PrivateLayout';
-
-interface Pair {
-  _id: string;
-  name: string;
-  symbol: string;
-  image: string;
-  currentValue: number;
-  minValue: number;
-  maxValue: number;
-  minPercentage: number;
-  maxPercentage: number;
-  isRecommended: boolean;
-  holdings?: string;
-  holdingsValue?: number;
-}
+import axios from 'axios';
 
 export default function TradePage() {
   const { user, token } = useAuth();
+  const { pairs, loading } = usePrice();
   const router = useRouter();
-  const [pairs, setPairs] = useState<Pair[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showAllOtherPairs, setShowAllOtherPairs] = useState(false);
-  const [openOrderPair, setOpenOrderPair] = useState<string | null>(null);
+  const [openOrder, setOpenOrder] = useState<any>(null);
 
   useEffect(() => {
     if (!user) {
       router.push('/login');
       return;
     }
-    fetchPairs();
-    fetchOpenOrderPair();
-    startPriceUpdates();
+    fetchOpenOrder();
   }, [user]);
 
-  const fetchPairs = async () => {
-    try {
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/pairs`);
-      const pairsWithHoldings = response.data.pairs.map((pair: Pair) => ({
-        ...pair,
-        holdings: getRandomHoldings(pair.symbol),
-        holdingsValue: calculateHoldingsValue(pair),
-        currentValue: generateRealisticPrice(pair)
-      }));
-      setPairs(pairsWithHoldings);
-    } catch (error) {
-      console.error('Error fetching pairs:', error);
-      toast.error('Failed to fetch trading pairs');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchOpenOrderPair = async () => {
+  const fetchOpenOrder = async () => {
     try {
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/orders/open`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.order) {
-        setOpenOrderPair(response.data.order.pairSymbol);
+        setOpenOrder(response.data.order);
       }
     } catch (error) {
       console.error('Error fetching open order:', error);
     }
   };
 
-  const generateRealisticPrice = (pair: Pair): number => {
-    const { minValue, maxValue, minPercentage, maxPercentage } = pair;
-    const range = maxValue - minValue;
-    const randomPercent = Math.random();
-    let price = minValue + (range * randomPercent);
-    
-    const percentVariation = minPercentage + (Math.random() * (maxPercentage - minPercentage));
-    const variation = price * (percentVariation / 100);
-    
-    if (Math.random() > 0.5) {
-      price += variation;
-    } else {
-      price -= variation;
-    }
-    
-    return Math.max(minValue, Math.min(maxValue, price));
-  };
-
-  const calculateHoldingsValue = (pair: Pair): number => {
-    const holdingsAmount = parseFloat(getRandomHoldings(pair.symbol).split(' ')[0].replace(/,/g, ''));
-    return holdingsAmount * pair.currentValue;
-  };
-
-  const updatePairPrice = (pair: Pair): Pair => {
-    const { minValue, maxValue, minPercentage, maxPercentage, currentValue } = pair;
-    
-    const percentChange = minPercentage + (Math.random() * (maxPercentage - minPercentage));
-    let newValue = currentValue * (1 + (percentChange / 100));
-    
-    if (newValue > maxValue) {
-      newValue = maxValue - (Math.random() * (maxValue - minValue) * 0.1);
-    } else if (newValue < minValue) {
-      newValue = minValue + (Math.random() * (maxValue - minValue) * 0.1);
-    }
-    
-    return {
-      ...pair,
-      currentValue: newValue,
-      holdingsValue: calculateHoldingsValue({ ...pair, currentValue: newValue })
-    };
-  };
-
-  const startPriceUpdates = () => {
-    setInterval(() => {
-      setPairs(prevPairs => 
-        prevPairs.map(pair => updatePairPrice(pair))
-      );
-    }, 5000);
-  };
-
-  const getRandomHoldings = (symbol: string) => {
-    const holdings: { [key: string]: string } = {
-      'BTC': '0.094 BTC',
-      'ETH': '1.83 ETH',
-      'MATIC': '674.42 MATIC',
-      'SOL': '84.36 SOL',
-      'TRUMP': '245.67 TRUMP',
-      'TON': '156.89 TON',
-      'DOT': '89.45 DOT',
-      'BNB': '12.45 BNB',
-      'ADA': '1250.50 ADA',
-      'XRP': '845.67 XRP',
-      'DOGE': '2567.89 DOGE',
-      'PEPE': '4567890 PEPE',
-      'LINK': '45.67 LINK',
-      'LTC': '23.45 LTC'
-    };
-    return holdings[symbol] || `${Math.floor(Math.random() * 1000)} ${symbol}`;
-  };
-
-  const getPriceChange = (pair: Pair) => {
+  const getPriceChange = (pair: any) => {
     const { minValue, maxValue, currentValue } = pair;
     const isPositive = currentValue > (minValue + maxValue) / 2;
     const avgValue = (minValue + maxValue) / 2;
@@ -160,6 +54,17 @@ export default function TradePage() {
     if (user?.firstName) return user.firstName;
     if (user?.lastName) return user.lastName;
     return "User";
+  };
+
+  // Check if target is reached for the active order
+  const isTargetReached = (pair: any) => {
+    if (!openOrder || pair.symbol !== openOrder.pairSymbol) return false;
+    
+    if (openOrder.type === 'buy') {
+      return pair.currentValue <= openOrder.targetPrice;
+    } else {
+      return pair.currentValue >= openOrder.targetPrice;
+    }
   };
 
   const recommendedPairs = pairs.filter(p => p.isRecommended).slice(0, 5);
@@ -227,60 +132,136 @@ export default function TradePage() {
 
           {/* Trading Pairs Section */}
           <div className="space-y-3">
-            {/* Recommended Pairs - Always visible */}
+            {/* Recommended Pairs */}
             {recommendedPairs.length > 0 && (
               <div className="mb-4">
                 <h3 className="text-purple-400 text-sm font-semibold mb-3 px-2">⭐ TOP 5 RECOMMENDED</h3>
                 {recommendedPairs.map((pair) => {
                   const { isPositive, percentageChange } = getPriceChange(pair);
-                  const hasOpenOrder = openOrderPair === pair.symbol;
+                  const hasOpenOrder = openOrder?.pairSymbol === pair.symbol;
+                  const targetReached = hasOpenOrder && isTargetReached(pair);
+                  
+                  // Determine glow color based on order type and target status
+                  let glowColor = '';
+                  if (hasOpenOrder) {
+                    if (targetReached) {
+                      glowColor = openOrder?.type === 'buy' ? 'green' : 'green';
+                    } else {
+                      glowColor = openOrder?.type === 'buy' ? 'yellow' : 'yellow';
+                    }
+                  }
+                  
                   return (
                     <div
                       key={pair._id}
-                      className={`bg-gray-800/50 rounded-2xl p-4 mb-3 cursor-pointer transition-all duration-200 hover:bg-gray-700/70 ${
-                        hasOpenOrder ? 'ring-2 ring-yellow-500 bg-yellow-500/10' : ''
+                      className={`relative rounded-2xl p-4 mb-3 cursor-pointer transition-all duration-200 hover:scale-[1.02] ${
+                        hasOpenOrder ? 'bg-gray-800/70' : 'bg-gray-800/50 hover:bg-gray-700/70'
                       }`}
                       onClick={() => router.push(`/trade/${pair.symbol}`)}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-14 h-14 bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl flex items-center justify-center">
-                            {pair.image ? (
-                              <Image src={pair.image} alt={pair.name} width={40} height={40} className="rounded-full" />
-                            ) : (
-                              <span className="text-2xl">{pair.symbol.charAt(0)}</span>
-                            )}
+                      {/* Glow Effects for Active Order Card */}
+                      {hasOpenOrder && (
+                        <>
+                          {/* Outer glow */}
+                          <div className={`absolute -inset-0.5 rounded-2xl blur-xl opacity-75 animate-pulse ${
+                            targetReached 
+                              ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                              : 'bg-gradient-to-r from-yellow-500 to-orange-500'
+                          }`} />
+                          {/* Inner glow */}
+                          <div className={`absolute -inset-0.5 rounded-2xl blur-md opacity-50 ${
+                            targetReached 
+                              ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                              : 'bg-gradient-to-r from-yellow-500 to-orange-500'
+                          }`} />
+                          {/* Content background */}
+                          <div className="relative bg-gray-800 rounded-2xl p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-4">
+                                <div className="w-14 h-14 bg-gradient-to-br from-gray-700 to-gray-800 rounded-2xl flex items-center justify-center">
+                                  {pair.image ? (
+                                    <Image src={pair.image} alt={pair.name} width={40} height={40} className="rounded-full" />
+                                  ) : (
+                                    <span className="text-2xl">{pair.symbol.charAt(0)}</span>
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="text-white font-semibold text-base">{pair.name}</h3>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                      openOrder?.type === 'buy' 
+                                        ? 'bg-green-500/20 text-green-400' 
+                                        : 'bg-red-500/20 text-red-400'
+                                    }`}>
+                                      {openOrder?.type?.toUpperCase()} ACTIVE
+                                    </span>
+                                  </div>
+                                  <p className="text-gray-400 text-sm">{pair.holdings || `${Math.floor(Math.random() * 100)} ${pair.symbol}`}</p>
+                                  <p className="text-gray-500 text-xs mt-1">
+                                    24h Range: ${pair.minValue.toLocaleString()} - ${pair.maxValue.toLocaleString()}
+                                  </p>
+                                  {targetReached && (
+                                    <p className="text-green-400 text-xs mt-1 font-semibold animate-pulse">
+                                      ✓ Target Reached! Order will close soon
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-white font-bold text-base">
+                                  ${pair.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                                <div className={`text-sm font-semibold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                                  {isPositive ? '+' : ''}{percentageChange}%
+                                </div>
+                                <p className="text-gray-500 text-xs mt-1">
+                                  Target: ${openOrder?.targetPrice?.toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="text-white font-semibold text-base">{pair.name}</h3>
-                            <p className="text-gray-400 text-sm">{pair.holdings || `${Math.floor(Math.random() * 100)} ${pair.symbol}`}</p>
-                            <p className="text-gray-500 text-xs mt-1">
-                              24h Range: ${pair.minValue.toLocaleString()} - ${pair.maxValue.toLocaleString()}
+                        </>
+                      )}
+                      
+                      {/* Normal card without glow */}
+                      {!hasOpenOrder && (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-4">
+                            <div className="w-14 h-14 bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl flex items-center justify-center">
+                              {pair.image ? (
+                                <Image src={pair.image} alt={pair.name} width={40} height={40} className="rounded-full" />
+                              ) : (
+                                <span className="text-2xl">{pair.symbol.charAt(0)}</span>
+                              )}
+                            </div>
+                            <div>
+                              <h3 className="text-white font-semibold text-base">{pair.name}</h3>
+                              <p className="text-gray-400 text-sm">{pair.holdings || `${Math.floor(Math.random() * 100)} ${pair.symbol}`}</p>
+                              <p className="text-gray-500 text-xs mt-1">
+                                24h Range: ${pair.minValue.toLocaleString()} - ${pair.maxValue.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-white font-bold text-base">
+                              ${pair.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </p>
-                            {hasOpenOrder && (
-                              <p className="text-yellow-400 text-xs mt-1">Open Order Active</p>
-                            )}
+                            <div className={`text-sm font-semibold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                              {isPositive ? '+' : ''}{percentageChange}%
+                            </div>
+                            <p className="text-gray-500 text-xs mt-1">
+                              ${(pair.holdingsValue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-white font-bold text-base">
-                            ${pair.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </p>
-                          <div className={`text-sm font-semibold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                            {isPositive ? '+' : ''}{percentageChange}%
-                          </div>
-                          <p className="text-gray-500 text-xs mt-1">
-                            ${(pair.holdingsValue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </p>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
             )}
 
-            {/* Show More Button for Other Pairs */}
+            {/* Show More Button */}
             {otherPairs.length > 0 && (
               <div className="mb-4">
                 <button
@@ -300,52 +281,122 @@ export default function TradePage() {
               </div>
             )}
 
-            {/* Other Pairs - Conditionally visible */}
+            {/* Other Pairs */}
             {showAllOtherPairs && otherPairs.length > 0 && (
               <div className="space-y-3">
                 {otherPairs.map((pair) => {
                   const { isPositive, percentageChange } = getPriceChange(pair);
-                  const hasOpenOrder = openOrderPair === pair.symbol;
+                  const hasOpenOrder = openOrder?.pairSymbol === pair.symbol;
+                  const targetReached = hasOpenOrder && isTargetReached(pair);
+                  
+                  let glowColor = '';
+                  if (hasOpenOrder) {
+                    if (targetReached) {
+                      glowColor = openOrder?.type === 'buy' ? 'green' : 'green';
+                    } else {
+                      glowColor = openOrder?.type === 'buy' ? 'yellow' : 'yellow';
+                    }
+                  }
+                  
                   return (
                     <div
                       key={pair._id}
-                      className={`bg-gray-800/50 rounded-2xl p-4 mb-3 cursor-pointer transition-all duration-200 hover:bg-gray-700/70 ${
-                        hasOpenOrder ? 'ring-2 ring-yellow-500 bg-yellow-500/10' : ''
+                      className={`relative rounded-2xl p-4 mb-3 cursor-pointer transition-all duration-200 hover:scale-[1.02] ${
+                        hasOpenOrder ? 'bg-gray-800/70' : 'bg-gray-800/50 hover:bg-gray-700/70'
                       }`}
                       onClick={() => router.push(`/trade/${pair.symbol}`)}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-14 h-14 bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl flex items-center justify-center">
-                            {pair.image ? (
-                              <Image src={pair.image} alt={pair.name} width={40} height={40} className="rounded-full" />
-                            ) : (
-                              <span className="text-2xl">{pair.symbol.charAt(0)}</span>
-                            )}
+                      {hasOpenOrder && (
+                        <>
+                          <div className={`absolute -inset-0.5 rounded-2xl blur-xl opacity-75 animate-pulse ${
+                            targetReached 
+                              ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                              : 'bg-gradient-to-r from-yellow-500 to-orange-500'
+                          }`} />
+                          <div className={`absolute -inset-0.5 rounded-2xl blur-md opacity-50 ${
+                            targetReached 
+                              ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                              : 'bg-gradient-to-r from-yellow-500 to-orange-500'
+                          }`} />
+                          <div className="relative bg-gray-800 rounded-2xl p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-4">
+                                <div className="w-14 h-14 bg-gradient-to-br from-gray-700 to-gray-800 rounded-2xl flex items-center justify-center">
+                                  {pair.image ? (
+                                    <Image src={pair.image} alt={pair.name} width={40} height={40} className="rounded-full" />
+                                  ) : (
+                                    <span className="text-2xl">{pair.symbol.charAt(0)}</span>
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="text-white font-semibold text-base">{pair.name}</h3>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                      openOrder?.type === 'buy' 
+                                        ? 'bg-green-500/20 text-green-400' 
+                                        : 'bg-red-500/20 text-red-400'
+                                    }`}>
+                                      {openOrder?.type?.toUpperCase()} ACTIVE
+                                    </span>
+                                  </div>
+                                  <p className="text-gray-400 text-sm">{pair.holdings || `${Math.floor(Math.random() * 100)} ${pair.symbol}`}</p>
+                                  <p className="text-gray-500 text-xs mt-1">
+                                    24h Range: ${pair.minValue.toLocaleString()} - ${pair.maxValue.toLocaleString()}
+                                  </p>
+                                  {targetReached && (
+                                    <p className="text-green-400 text-xs mt-1 font-semibold animate-pulse">
+                                      ✓ Target Reached! Order will close soon
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-white font-bold text-base">
+                                  ${pair.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                                <div className={`text-sm font-semibold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                                  {isPositive ? '+' : ''}{percentageChange}%
+                                </div>
+                                <p className="text-gray-500 text-xs mt-1">
+                                  Target: ${openOrder?.targetPrice?.toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="text-white font-semibold text-base">{pair.name}</h3>
-                            <p className="text-gray-400 text-sm">{pair.holdings || `${Math.floor(Math.random() * 100)} ${pair.symbol}`}</p>
-                            <p className="text-gray-500 text-xs mt-1">
-                              24h Range: ${pair.minValue.toLocaleString()} - ${pair.maxValue.toLocaleString()}
+                        </>
+                      )}
+                      
+                      {!hasOpenOrder && (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-4">
+                            <div className="w-14 h-14 bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl flex items-center justify-center">
+                              {pair.image ? (
+                                <Image src={pair.image} alt={pair.name} width={40} height={40} className="rounded-full" />
+                              ) : (
+                                <span className="text-2xl">{pair.symbol.charAt(0)}</span>
+                              )}
+                            </div>
+                            <div>
+                              <h3 className="text-white font-semibold text-base">{pair.name}</h3>
+                              <p className="text-gray-400 text-sm">{pair.holdings || `${Math.floor(Math.random() * 100)} ${pair.symbol}`}</p>
+                              <p className="text-gray-500 text-xs mt-1">
+                                24h Range: ${pair.minValue.toLocaleString()} - ${pair.maxValue.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-white font-bold text-base">
+                              ${pair.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </p>
-                            {hasOpenOrder && (
-                              <p className="text-yellow-400 text-xs mt-1">Open Order Active</p>
-                            )}
+                            <div className={`text-sm font-semibold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                              {isPositive ? '+' : ''}{percentageChange}%
+                            </div>
+                            <p className="text-gray-500 text-xs mt-1">
+                              ${(pair.holdingsValue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-white font-bold text-base">
-                            ${pair.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </p>
-                          <div className={`text-sm font-semibold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                            {isPositive ? '+' : ''}{percentageChange}%
-                          </div>
-                          <p className="text-gray-500 text-xs mt-1">
-                            ${(pair.holdingsValue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </p>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
