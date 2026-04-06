@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
-import { FaArrowDown, FaQrcode, FaRobot, FaInfoCircle } from 'react-icons/fa';
+import { FaArrowDown, FaQrcode, FaRobot, FaInfoCircle, FaChevronDown, FaChevronUp } from 'react-icons/fa';
 import PrivateLayout from '@/layouts/PrivateLayout';
 
 interface Pair {
@@ -29,7 +29,7 @@ export default function TradePage() {
   const router = useRouter();
   const [pairs, setPairs] = useState<Pair[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAll, setShowAll] = useState(false);
+  const [showAllOtherPairs, setShowAllOtherPairs] = useState(false);
   const [marketOffDays, setMarketOffDays] = useState<string[]>([]);
   const [isLoadingMarketDays, setIsLoadingMarketDays] = useState(false);
 
@@ -46,11 +46,12 @@ export default function TradePage() {
   const fetchPairs = async () => {
     try {
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/pairs`);
-      // Add holdings data to pairs
+      // Add holdings data to pairs and generate realistic current values
       const pairsWithHoldings = response.data.pairs.map((pair: Pair) => ({
         ...pair,
         holdings: getRandomHoldings(pair.symbol),
-        holdingsValue: getRandomHoldingsValue(pair.currentValue)
+        holdingsValue: calculateHoldingsValue(pair),
+        currentValue: generateRealisticPrice(pair)
       }));
       setPairs(pairsWithHoldings);
     } catch (error) {
@@ -73,18 +74,59 @@ export default function TradePage() {
     }
   };
 
+  // Generate realistic price based on min/max values
+  const generateRealisticPrice = (pair: Pair): number => {
+    const { minValue, maxValue, minPercentage, maxPercentage } = pair;
+    const range = maxValue - minValue;
+    const randomPercent = Math.random();
+    let price = minValue + (range * randomPercent);
+    
+    // Apply percentage variation
+    const percentVariation = minPercentage + (Math.random() * (maxPercentage - minPercentage));
+    const variation = price * (percentVariation / 100);
+    
+    if (Math.random() > 0.5) {
+      price += variation;
+    } else {
+      price -= variation;
+    }
+    
+    return Math.max(minValue, Math.min(maxValue, price));
+  };
+
+  // Calculate holdings value based on current price
+  const calculateHoldingsValue = (pair: Pair): number => {
+    const holdingsAmount = parseFloat(getRandomHoldings(pair.symbol).split(' ')[0].replace(/,/g, ''));
+    return holdingsAmount * pair.currentValue;
+  };
+
+  // Update single pair price with realistic movement
+  const updatePairPrice = (pair: Pair): Pair => {
+    const { minValue, maxValue, minPercentage, maxPercentage, currentValue } = pair;
+    
+    // Calculate price change based on percentage range
+    const percentChange = minPercentage + (Math.random() * (maxPercentage - minPercentage));
+    let newValue = currentValue * (1 + (percentChange / 100));
+    
+    // Ensure price stays within min/max bounds
+    if (newValue > maxValue) {
+      newValue = maxValue - (Math.random() * (maxValue - minValue) * 0.1);
+    } else if (newValue < minValue) {
+      newValue = minValue + (Math.random() * (maxValue - minValue) * 0.1);
+    }
+    
+    return {
+      ...pair,
+      currentValue: newValue,
+      holdingsValue: calculateHoldingsValue({ ...pair, currentValue: newValue })
+    };
+  };
+
   const startPriceUpdates = () => {
-    setInterval(async () => {
-      try {
-        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/pairs`);
-        const updatedPairs = response.data.pairs.map((pair: Pair) => ({
-          ...pair,
-          holdingsValue: getRandomHoldingsValue(pair.currentValue)
-        }));
-        setPairs(updatedPairs);
-      } catch (error) {
-        console.error('Error updating prices:', error);
-      }
+    setInterval(() => {
+      setPairs(prevPairs => 
+        prevPairs.map(pair => updatePairPrice(pair))
+      );
     }, 5000);
   };
 
@@ -101,23 +143,27 @@ export default function TradePage() {
       'ADA': '1250.50 ADA',
       'XRP': '845.67 XRP',
       'DOGE': '2567.89 DOGE',
-      'PEPE': '4,567,890 PEPE',
+      'PEPE': '4567890 PEPE',
       'LINK': '45.67 LINK',
       'LTC': '23.45 LTC'
     };
     return holdings[symbol] || `${Math.floor(Math.random() * 1000)} ${symbol}`;
   };
 
-  const getRandomHoldingsValue = (currentValue: number) => {
-    const randomAmount = Math.random() * 10000;
-    return randomAmount;
-  };
-
   const getPriceChange = (pair: Pair) => {
-    const change = ((pair.currentValue - pair.minValue) / (pair.maxValue - pair.minValue)) * 100;
-    const isPositive = pair.currentValue > (pair.minValue + pair.maxValue) / 2;
-    const absoluteChange = pair.currentValue - (pair.minValue + pair.maxValue) / 2;
-    return { change, isPositive, absoluteChange };
+    const { minValue, maxValue, currentValue } = pair;
+    
+    // Determine if price is going up or down based on recent movement
+    const isPositive = currentValue > (minValue + maxValue) / 2;
+    
+    // Calculate actual percentage change
+    const avgValue = (minValue + maxValue) / 2;
+    const percentageChange = ((currentValue - avgValue) / avgValue) * 100;
+    
+    return { 
+      isPositive, 
+      percentageChange: Math.abs(percentageChange).toFixed(2)
+    };
   };
 
   const isTodayMarketOff = () => {
@@ -194,73 +240,16 @@ export default function TradePage() {
                 </button>
               ))}
             </div>
-
-            {/* ALGO Section with Market Off Days */}
-            <div className="bg-gradient-to-br from-purple-900/30 to-purple-800/20 rounded-2xl p-4 border border-purple-700/30 mb-6 backdrop-blur-sm">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-purple-800 rounded-xl flex items-center justify-center">
-                    <FaRobot className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <span className="text-white font-semibold">ALGO Trade</span>
-                    <div className="text-purple-300 text-xs">
-                      Automated trading bot
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Market Off Days Info */}
-              {marketOffDays.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-purple-700/30">
-                  <div className="flex items-start gap-2">
-                    <div className="text-xs text-yellow-300">
-                      <div className="font-medium mb-1">
-                        {isTodayMarketOff() ? (
-                          <span className="text-yellow-400">⚠️ Today is market closed</span>
-                        ) : (
-                          <span className="text-purple-300">📈 Market is open today</span>
-                        )}
-                      </div>
-                      {isTodayMarketOff() && (
-                        <div className="text-yellow-200/70 text-[10px] mt-1">
-                          No Algo trading profits will be added today
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Loading State */}
-              {isLoadingMarketDays && (
-                <div className="mt-3 pt-3 border-t border-purple-700/30">
-                  <div className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-yellow-400"></div>
-                    <div className="text-xs text-yellow-300">
-                      Loading market schedule...
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Info Tooltip */}
-              <div className="mt-2 flex items-center gap-1 text-purple-300/70 text-[10px]">
-                <FaInfoCircle className="w-2.5 h-2.5" />
-                <span>Algo Trade automatically deactivates after profit calculation</span>
-              </div>
-            </div>
           </div>
 
           {/* Trading Pairs Section */}
-          <div className="space-y-3 max-h-[600px] overflow-y-auto">
-            {/* Recommended Pairs */}
+          <div className="space-y-3">
+            {/* Recommended Pairs - Always visible */}
             {recommendedPairs.length > 0 && (
               <div className="mb-4">
                 <h3 className="text-purple-400 text-sm font-semibold mb-3 px-2">⭐ TOP 5 RECOMMENDED</h3>
                 {recommendedPairs.map((pair) => {
-                  const { change, isPositive, absoluteChange } = getPriceChange(pair);
+                  const { isPositive, percentageChange } = getPriceChange(pair);
                   return (
                     <div
                       key={pair._id}
@@ -279,15 +268,21 @@ export default function TradePage() {
                           <div>
                             <h3 className="text-white font-semibold text-base">{pair.name}</h3>
                             <p className="text-gray-400 text-sm">{pair.holdings || `${Math.floor(Math.random() * 100)} ${pair.symbol}`}</p>
+                            <p className="text-gray-500 text-xs mt-1">
+                              24h Range: ${pair.minValue.toLocaleString()} - ${pair.maxValue.toLocaleString()}
+                            </p>
                           </div>
                         </div>
                         <div className="text-right">
                           <p className="text-white font-bold text-base">
-                            ${(pair.holdingsValue || pair.currentValue * (Math.random() * 10)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ${pair.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
                           <div className={`text-sm font-semibold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                            {isPositive ? '+' : ''}{absoluteChange.toFixed(2)}%
+                            {isPositive ? '+' : ''}{percentageChange}%
                           </div>
+                          <p className="text-gray-500 text-xs mt-1">
+                            ${(pair.holdingsValue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -296,12 +291,31 @@ export default function TradePage() {
               </div>
             )}
 
-            {/* Other Pairs */}
-            {otherPairs.length > 0 && (showAll || otherPairs.length <= 5) && (
-              <div>
-                <h3 className="text-gray-400 text-sm font-semibold mb-3 px-2">📊 ALL PAIRS</h3>
-                {(showAll ? otherPairs : otherPairs.slice(0, 5)).map((pair) => {
-                  const { change, isPositive, absoluteChange } = getPriceChange(pair);
+            {/* Show More Button for Other Pairs */}
+            {otherPairs.length > 0 && (
+              <div className="mb-4">
+                <button
+                  onClick={() => setShowAllOtherPairs(!showAllOtherPairs)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-800/50 rounded-xl hover:bg-gray-700/50 transition-all duration-200"
+                >
+                  <span className="text-gray-300 font-medium">
+                    📊 Other Pairs ({otherPairs.length})
+                  </span>
+                  <div className="flex items-center text-purple-400">
+                    <span className="text-sm mr-2">
+                      {showAllOtherPairs ? 'Show Less' : 'Show More'}
+                    </span>
+                    {showAllOtherPairs ? <FaChevronUp className="w-4 h-4" /> : <FaChevronDown className="w-4 h-4" />}
+                  </div>
+                </button>
+              </div>
+            )}
+
+            {/* Other Pairs - Conditionally visible */}
+            {showAllOtherPairs && otherPairs.length > 0 && (
+              <div className="space-y-3">
+                {otherPairs.map((pair) => {
+                  const { isPositive, percentageChange } = getPriceChange(pair);
                   return (
                     <div
                       key={pair._id}
@@ -320,30 +334,26 @@ export default function TradePage() {
                           <div>
                             <h3 className="text-white font-semibold text-base">{pair.name}</h3>
                             <p className="text-gray-400 text-sm">{pair.holdings || `${Math.floor(Math.random() * 100)} ${pair.symbol}`}</p>
+                            <p className="text-gray-500 text-xs mt-1">
+                              24h Range: ${pair.minValue.toLocaleString()} - ${pair.maxValue.toLocaleString()}
+                            </p>
                           </div>
                         </div>
                         <div className="text-right">
                           <p className="text-white font-bold text-base">
-                            ${(pair.holdingsValue || pair.currentValue * (Math.random() * 10)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ${pair.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
                           <div className={`text-sm font-semibold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                            {isPositive ? '+' : ''}{absoluteChange.toFixed(2)}%
+                            {isPositive ? '+' : ''}{percentageChange}%
                           </div>
+                          <p className="text-gray-500 text-xs mt-1">
+                            ${(pair.holdingsValue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
                         </div>
                       </div>
                     </div>
                   );
                 })}
-                {otherPairs.length > 5 && !showAll && (
-                  <div className="text-center py-4">
-                    <button
-                      onClick={() => setShowAll(true)}
-                      className="text-purple-400 hover:text-purple-300 transition text-sm font-medium"
-                    >
-                      View More ({otherPairs.length - 5} more)
-                    </button>
-                  </div>
-                )}
               </div>
             )}
           </div>
