@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useReducer, useEffect } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
 
@@ -20,77 +20,93 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (
-    firstName: string,
-    lastName: string,
-    email: string,
-    password: string,
-  ) => Promise<void>;
+  register: (firstName: string, lastName: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   loading: boolean;
   refreshUser: () => Promise<void>;
 }
 
+type AuthState = {
+  user: User | null;
+  token: string | null;
+  loading: boolean;
+};
+
+type AuthAction =
+  | { type: "INIT_DONE"; user: User | null; token: string | null }
+  | { type: "SET_USER"; user: User; token: string }
+  | { type: "UPDATE_USER"; user: User }
+  | { type: "LOGOUT" };
+
+function authReducer(state: AuthState, action: AuthAction): AuthState {
+  switch (action.type) {
+    case "INIT_DONE":
+      // Single atomic update: loading=false + user + token all at once
+      return { loading: false, user: action.user, token: action.token };
+    case "SET_USER":
+      return { loading: false, user: action.user, token: action.token };
+    case "UPDATE_USER":
+      return { ...state, user: action.user };
+    case "LOGOUT":
+      return { loading: false, user: null, token: null };
+    default:
+      return state;
+  }
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-
-// Configure axios defaults
 axios.defaults.withCredentials = true;
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 };
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+const enrichUser = (user: User): User => {
+  if (user.name && !user.firstName) {
+    const parts = user.name.split(" ");
+    return { ...user, firstName: parts[0] || "", lastName: parts.slice(1).join(" ") || "" };
+  }
+  return user;
+};
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [state, dispatch] = useReducer(authReducer, {
+    user: null,
+    token: null,
+    loading: true, // starts true — nothing renders until INIT_DONE fires
+  });
 
   useEffect(() => {
-    const storedToken = localStorage.getItem("token");
-    const storedUser = localStorage.getItem("user");
-    if (storedToken && storedUser) {
-      const parsedUser = JSON.parse(storedUser);
-      // Extract firstName and lastName from name if not present
-      if (parsedUser.name && !parsedUser.firstName) {
-        const nameParts = parsedUser.name.split(" ");
-        parsedUser.firstName = nameParts[0] || "";
-        parsedUser.lastName = nameParts.slice(1).join(" ") || "";
+    try {
+      const storedToken = localStorage.getItem("token");
+      const storedUser = localStorage.getItem("user");
+      if (storedToken && storedUser) {
+        const parsedUser = enrichUser(JSON.parse(storedUser));
+        axios.defaults.headers.common["Authorization"] = `Bearer ${storedToken}`;
+        dispatch({ type: "INIT_DONE", user: parsedUser, token: storedToken });
+      } else {
+        dispatch({ type: "INIT_DONE", user: null, token: null });
       }
-      setToken(storedToken);
-      setUser(parsedUser);
-      // Set default authorization header
-      axios.defaults.headers.common["Authorization"] = `Bearer ${storedToken}`;
+    } catch {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      dispatch({ type: "INIT_DONE", user: null, token: null });
     }
-    setLoading(false);
   }, []);
 
   const refreshUser = async () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) return;
-      
       const response = await axios.get(`${API_URL}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
-      
-      const updatedUser = response.data.user;
-      // Extract firstName and lastName from name
-      if (updatedUser.name && !updatedUser.firstName) {
-        const nameParts = updatedUser.name.split(" ");
-        updatedUser.firstName = nameParts[0] || "";
-        updatedUser.lastName = nameParts.slice(1).join(" ") || "";
-      }
-      
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-      setUser(updatedUser);
+      const updated = enrichUser(response.data.user);
+      localStorage.setItem("user", JSON.stringify(updated));
+      dispatch({ type: "UPDATE_USER", user: updated });
     } catch (error) {
       console.error("Failed to refresh user:", error);
     }
@@ -98,66 +114,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await axios.post(`${API_URL}/auth/login`, {
-        email,
-        password,
-      });
+      const response = await axios.post(`${API_URL}/auth/login`, { email, password });
       const { token, user } = response.data;
-
-      // Check if user is suspended
       if (user.status === "inactive") {
-        throw new Error(
-          "Your account has been suspended. Please contact support.",
-        );
+        throw new Error("Your account has been suspended. Please contact support.");
       }
-
-      // Extract firstName and lastName from name
-      if (user.name && !user.firstName) {
-        const nameParts = user.name.split(" ");
-        user.firstName = nameParts[0] || "";
-        user.lastName = nameParts.slice(1).join(" ") || "";
-      }
-
+      const enriched = enrichUser(user);
       localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(user));
+      localStorage.setItem("user", JSON.stringify(enriched));
       axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-      setToken(token);
-      setUser(user);
+      dispatch({ type: "SET_USER", user: enriched, token });
       toast.success("Login successful!");
     } catch (error: any) {
-      console.error("Login error:", error);
-      toast.error(error.response?.data?.message || "Login failed");
+      toast.error(error.response?.data?.message || error.message || "Login failed");
       throw error;
     }
   };
 
-  const register = async (
-    firstName: string,
-    lastName: string,
-    email: string,
-    password: string,
-  ) => {
+  const register = async (firstName: string, lastName: string, email: string, password: string) => {
     try {
-      const fullName = `${firstName} ${lastName}`;
       const response = await axios.post(`${API_URL}/auth/register`, {
-        name: fullName,
+        name: `${firstName} ${lastName}`,
         email,
         password,
       });
       const { token, user } = response.data;
-      
-      // Add firstName and lastName to user object
-      user.firstName = firstName;
-      user.lastName = lastName;
-      
+      const enriched = { ...enrichUser(user), firstName, lastName };
       localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(user));
+      localStorage.setItem("user", JSON.stringify(enriched));
       axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-      setToken(token);
-      setUser(user);
+      dispatch({ type: "SET_USER", user: enriched, token });
       toast.success("Registration successful!");
     } catch (error: any) {
-      console.error("Registration error:", error);
       toast.error(error.response?.data?.message || "Registration failed");
       throw error;
     }
@@ -167,14 +155,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     delete axios.defaults.headers.common["Authorization"];
-    setToken(null);
-    setUser(null);
+    dispatch({ type: "LOGOUT" });
     toast.success("Logged out successfully");
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, token, login, register, logout, loading, refreshUser }}
+      value={{
+        user: state.user,
+        token: state.token,
+        login,
+        register,
+        logout,
+        loading: state.loading,
+        refreshUser,
+      }}
     >
       {children}
     </AuthContext.Provider>

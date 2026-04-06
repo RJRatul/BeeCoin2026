@@ -14,7 +14,6 @@ import {
   FaWallet,
   FaGift,
   FaChartLine,
-  FaRobot,
   FaBars,
   FaTimes,
   FaExchangeAlt,
@@ -51,14 +50,12 @@ export default function PrivateLayout({ children }: { children: React.ReactNode 
     );
   }
 
-  // Navigation items
+  // Navigation items with larger icons
   const navItems = [
-    { href: "/trade", icon: <FaChartLine className="w-5 h-5" />, label: "Trade" },
-    { href: "/aiTrade", icon: <FaRobot className="w-5 h-5" />, label: "ALGO Trade" },
-    { href: "/referral", icon: <FaGift className="w-5 h-5" />, label: "Referral" },
-    { href: "/deposit", icon: <FaWallet className="w-5 h-5" />, label: "Deposit" },
-    { href: "/withdrawal", icon: <FaExchangeAlt className="w-5 h-5" />, label: "Withdrawal" },
-    { href: "/account", icon: <FaUser className="w-5 h-5" />, label: "Account" },
+    { href: "/trade", icon: <FaChartLine className="w-7 h-7" />, label: "Trade" },
+    { href: "/deposit", icon: <FaWallet className="w-7 h-7" />, label: "Deposit" },
+    { href: "/withdrawal", icon: <FaExchangeAlt className="w-7 h-7" />, label: "Withdrawal" },
+    { href: "/account", icon: <FaUser className="w-7 h-7" />, label: "Account" },
   ];
 
   // Get user initials
@@ -93,17 +90,17 @@ export default function PrivateLayout({ children }: { children: React.ReactNode 
           />
         )}
 
-        {/* Sidebar */}
+        {/* Sidebar - Wider for larger icons */}
         <aside
-          className={`fixed inset-y-0 left-0 z-50 w-20 bg-gray-800 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 ${
+          className={`fixed inset-y-0 left-0 z-50 w-24 bg-gray-800 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
           <div className="flex flex-col h-full">
             {/* Logo */}
-            <div className="flex items-center justify-center h-16 px-2 bg-gray-900 border-b border-gray-700">
+            <div className="flex items-center justify-center h-20 px-2 bg-gray-900 border-b border-gray-700">
               <div className="flex flex-col items-center space-y-1">
-                <div className="w-12 h-8 relative">
+                <div className="w-14 h-10 relative">
                   <Image 
                     src="/logo.png" 
                     alt="BeeCoin Logo" 
@@ -112,14 +109,14 @@ export default function PrivateLayout({ children }: { children: React.ReactNode 
                     priority
                   />
                 </div>
-                <span className="text-xs font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent text-center leading-tight">
+                <span className="text-xs font-bold bg-gradient-to-r from-green-400 to-yellow-400 bg-clip-text text-transparent text-center leading-tight">
                   BeeCoin
                 </span>
               </div>
             </div>
 
-            {/* Navigation */}
-            <nav className="flex-1 px-3 py-6 space-y-2 overflow-y-auto">
+            {/* Navigation - Larger buttons */}
+            <nav className="flex-1 px-3 py-6 space-y-3 overflow-y-auto">
               {navItems.map((item) => (
                 <div
                   key={item.href}
@@ -127,7 +124,7 @@ export default function PrivateLayout({ children }: { children: React.ReactNode 
                   onMouseEnter={(e) => {
                     if (window.innerWidth >= 1024) {
                       const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                      setTooltip({ text: item.label, x: rect.right + 8, y: rect.top + rect.height / 2 });
+                      setTooltip({ text: item.label, x: rect.right + 12, y: rect.top + rect.height / 2 });
                     }
                   }}
                   onMouseLeave={() => {
@@ -137,7 +134,7 @@ export default function PrivateLayout({ children }: { children: React.ReactNode 
                     if (window.innerWidth < 1024) {
                       e.stopPropagation();
                       const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                      setTooltip({ text: item.label, x: rect.right + 8, y: rect.top + rect.height / 2 });
+                      setTooltip({ text: item.label, x: rect.right + 12, y: rect.top + rect.height / 2 });
                       setTimeout(() => setTooltip(null), 1500);
                     }
                   }}
@@ -145,10 +142,10 @@ export default function PrivateLayout({ children }: { children: React.ReactNode 
                   <Link
                     href={item.href}
                     onClick={() => setSidebarOpen(false)}
-                    className={`flex items-center justify-center w-12 h-12 rounded-lg transition-colors duration-200 ${
+                    className={`flex items-center justify-center w-14 h-14 rounded-xl transition-all duration-200 ${
                       isActive(item.href)
-                        ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg"
-                        : "text-gray-300 hover:bg-gray-700 hover:text-white"
+                        ? "bg-gradient-to-r from-green-600 to-yellow-600 text-white shadow-lg scale-105"
+                        : "text-gray-300 hover:bg-gray-700 hover:text-white hover:scale-105"
                     }`}
                   >
                     {item.icon}
@@ -157,17 +154,17 @@ export default function PrivateLayout({ children }: { children: React.ReactNode 
               ))}
             </nav>
 
-            {/* Sign out */}
-            <div className="p-3 border-t border-gray-700">
+            {/* Sign out - Larger button */}
+            <div className="p-4 border-t border-gray-700">
               <Button
                 onClick={() => {
                   logout();
                   setSidebarOpen(false);
                 }}
                 variant="secondary"
-                className="w-full justify-center text-red-400 hover:text-red-300 hover:bg-gray-700 rounded-lg py-3"
+                className="w-full justify-center text-red-400 hover:text-red-300 hover:bg-gray-700 rounded-xl py-4"
               >
-                <FaSignOutAlt className="w-5 h-5" />
+                <FaSignOutAlt className="w-7 h-7" />
               </Button>
             </div>
           </div>
@@ -175,10 +172,10 @@ export default function PrivateLayout({ children }: { children: React.ReactNode 
 
         {/* Main content */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-          {/* Header */}
+          {/* Header - Larger elements */}
           <header className="bg-gray-800 border-b border-gray-700">
             <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
-              {/* Mobile menu button */}
+              {/* Mobile menu button - Larger */}
               <div className="lg:hidden">
                 <button
                   onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -186,37 +183,36 @@ export default function PrivateLayout({ children }: { children: React.ReactNode 
                   aria-label="Toggle menu"
                 >
                   {sidebarOpen ? (
-                    <FaTimes className="w-5 h-5" />
+                    <FaTimes className="w-6 h-6" />
                   ) : (
-                    <FaBars className="w-5 h-5" />
+                    <FaBars className="w-6 h-6" />
                   )}
                 </button>
               </div>
 
               <div className="hidden lg:block flex-1"></div>
 
-              {/* Right side */}
+              {/* Right side - Larger user info */}
               <div className="flex items-center space-x-4">
                 <div className="flex items-center">
                   <div className="relative group">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold cursor-pointer">
+                    <div className="w-11 h-11 rounded-full bg-gradient-to-r from-green-500 to-yellow-500 flex items-center justify-center text-white font-bold text-lg cursor-pointer">
                       {getUserInitials()}
                     </div>
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap">
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-800 text-white text-sm rounded py-1.5 px-3 whitespace-nowrap">
                       {getUserName()}
                       <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
                     </div>
                   </div>
-                  <span className="ml-2 text-sm font-medium hidden md:block">{getUserName()}</span>
+                  <span className="ml-3 text-base font-medium hidden md:block text-white">{getUserName()}</span>
                 </div>
 
                 <Button
                   onClick={logout}
                   variant="secondary"
-                  size="sm"
-                  icon={<FaSignOutAlt className="w-4 h-4" />}
-                  className="hidden lg:flex"
-                  aria-label="Sign out"
+                  size="md"
+                  icon={<FaSignOutAlt className="w-5 h-5" />}
+                  className="hidden lg:flex px-4 py-2"
                 >
                   Sign Out
                 </Button>
@@ -228,11 +224,11 @@ export default function PrivateLayout({ children }: { children: React.ReactNode 
           <main className="flex-1 overflow-y-auto bg-gray-900">{children}</main>
         </div>
 
-        {/* Tooltip Portal */}
+        {/* Tooltip Portal - Larger tooltip */}
         {tooltip &&
           createPortal(
             <div
-              className="fixed bg-gray-800 text-white text-xs rounded py-1 px-2 z-50 pointer-events-none shadow-lg"
+              className="fixed bg-gray-800 text-white text-sm rounded-lg py-2 px-3 z-50 pointer-events-none shadow-lg font-medium"
               style={{
                 top: tooltip.y,
                 left: tooltip.x,
