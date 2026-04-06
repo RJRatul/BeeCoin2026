@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
-import { FaArrowDown, FaQrcode, FaRobot, FaInfoCircle, FaChevronDown, FaChevronUp } from 'react-icons/fa';
+import { FaArrowDown, FaQrcode, FaChevronDown, FaChevronUp } from 'react-icons/fa';
 import PrivateLayout from '@/layouts/PrivateLayout';
 
 interface Pair {
@@ -30,8 +30,7 @@ export default function TradePage() {
   const [pairs, setPairs] = useState<Pair[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAllOtherPairs, setShowAllOtherPairs] = useState(false);
-  const [marketOffDays, setMarketOffDays] = useState<string[]>([]);
-  const [isLoadingMarketDays, setIsLoadingMarketDays] = useState(false);
+  const [openOrderPair, setOpenOrderPair] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -39,14 +38,13 @@ export default function TradePage() {
       return;
     }
     fetchPairs();
-    fetchMarketOffDays();
+    fetchOpenOrderPair();
     startPriceUpdates();
   }, [user]);
 
   const fetchPairs = async () => {
     try {
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/pairs`);
-      // Add holdings data to pairs and generate realistic current values
       const pairsWithHoldings = response.data.pairs.map((pair: Pair) => ({
         ...pair,
         holdings: getRandomHoldings(pair.symbol),
@@ -62,26 +60,25 @@ export default function TradePage() {
     }
   };
 
-  const fetchMarketOffDays = async () => {
+  const fetchOpenOrderPair = async () => {
     try {
-      setIsLoadingMarketDays(true);
-      // Mock market off days - in production, fetch from API
-      setMarketOffDays(['Sunday', 'Saturday']);
+      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/orders/open`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.data.order) {
+        setOpenOrderPair(response.data.order.pairSymbol);
+      }
     } catch (error) {
-      console.error('Failed to fetch market off days:', error);
-    } finally {
-      setIsLoadingMarketDays(false);
+      console.error('Error fetching open order:', error);
     }
   };
 
-  // Generate realistic price based on min/max values
   const generateRealisticPrice = (pair: Pair): number => {
     const { minValue, maxValue, minPercentage, maxPercentage } = pair;
     const range = maxValue - minValue;
     const randomPercent = Math.random();
     let price = minValue + (range * randomPercent);
     
-    // Apply percentage variation
     const percentVariation = minPercentage + (Math.random() * (maxPercentage - minPercentage));
     const variation = price * (percentVariation / 100);
     
@@ -94,21 +91,17 @@ export default function TradePage() {
     return Math.max(minValue, Math.min(maxValue, price));
   };
 
-  // Calculate holdings value based on current price
   const calculateHoldingsValue = (pair: Pair): number => {
     const holdingsAmount = parseFloat(getRandomHoldings(pair.symbol).split(' ')[0].replace(/,/g, ''));
     return holdingsAmount * pair.currentValue;
   };
 
-  // Update single pair price with realistic movement
   const updatePairPrice = (pair: Pair): Pair => {
     const { minValue, maxValue, minPercentage, maxPercentage, currentValue } = pair;
     
-    // Calculate price change based on percentage range
     const percentChange = minPercentage + (Math.random() * (maxPercentage - minPercentage));
     let newValue = currentValue * (1 + (percentChange / 100));
     
-    // Ensure price stays within min/max bounds
     if (newValue > maxValue) {
       newValue = maxValue - (Math.random() * (maxValue - minValue) * 0.1);
     } else if (newValue < minValue) {
@@ -152,11 +145,7 @@ export default function TradePage() {
 
   const getPriceChange = (pair: Pair) => {
     const { minValue, maxValue, currentValue } = pair;
-    
-    // Determine if price is going up or down based on recent movement
     const isPositive = currentValue > (minValue + maxValue) / 2;
-    
-    // Calculate actual percentage change
     const avgValue = (minValue + maxValue) / 2;
     const percentageChange = ((currentValue - avgValue) / avgValue) * 100;
     
@@ -164,12 +153,6 @@ export default function TradePage() {
       isPositive, 
       percentageChange: Math.abs(percentageChange).toFixed(2)
     };
-  };
-
-  const isTodayMarketOff = () => {
-    if (marketOffDays.length === 0) return false;
-    const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-    return marketOffDays.includes(today);
   };
 
   const getUserName = () => {
@@ -250,10 +233,13 @@ export default function TradePage() {
                 <h3 className="text-purple-400 text-sm font-semibold mb-3 px-2">⭐ TOP 5 RECOMMENDED</h3>
                 {recommendedPairs.map((pair) => {
                   const { isPositive, percentageChange } = getPriceChange(pair);
+                  const hasOpenOrder = openOrderPair === pair.symbol;
                   return (
                     <div
                       key={pair._id}
-                      className="bg-gray-800/50 rounded-2xl p-4 mb-3 cursor-pointer transition-all duration-200 hover:bg-gray-700/70"
+                      className={`bg-gray-800/50 rounded-2xl p-4 mb-3 cursor-pointer transition-all duration-200 hover:bg-gray-700/70 ${
+                        hasOpenOrder ? 'ring-2 ring-yellow-500 bg-yellow-500/10' : ''
+                      }`}
                       onClick={() => router.push(`/trade/${pair.symbol}`)}
                     >
                       <div className="flex items-center justify-between">
@@ -271,6 +257,9 @@ export default function TradePage() {
                             <p className="text-gray-500 text-xs mt-1">
                               24h Range: ${pair.minValue.toLocaleString()} - ${pair.maxValue.toLocaleString()}
                             </p>
+                            {hasOpenOrder && (
+                              <p className="text-yellow-400 text-xs mt-1">Open Order Active</p>
+                            )}
                           </div>
                         </div>
                         <div className="text-right">
@@ -316,10 +305,13 @@ export default function TradePage() {
               <div className="space-y-3">
                 {otherPairs.map((pair) => {
                   const { isPositive, percentageChange } = getPriceChange(pair);
+                  const hasOpenOrder = openOrderPair === pair.symbol;
                   return (
                     <div
                       key={pair._id}
-                      className="bg-gray-800/50 rounded-2xl p-4 mb-3 cursor-pointer transition-all duration-200 hover:bg-gray-700/70"
+                      className={`bg-gray-800/50 rounded-2xl p-4 mb-3 cursor-pointer transition-all duration-200 hover:bg-gray-700/70 ${
+                        hasOpenOrder ? 'ring-2 ring-yellow-500 bg-yellow-500/10' : ''
+                      }`}
                       onClick={() => router.push(`/trade/${pair.symbol}`)}
                     >
                       <div className="flex items-center justify-between">
@@ -337,6 +329,9 @@ export default function TradePage() {
                             <p className="text-gray-500 text-xs mt-1">
                               24h Range: ${pair.minValue.toLocaleString()} - ${pair.maxValue.toLocaleString()}
                             </p>
+                            {hasOpenOrder && (
+                              <p className="text-yellow-400 text-xs mt-1">Open Order Active</p>
+                            )}
                           </div>
                         </div>
                         <div className="text-right">

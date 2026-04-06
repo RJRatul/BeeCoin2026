@@ -71,6 +71,23 @@ const PairSchema = new Schema<IPair>({
 
 PairSchema.pre<IPair>('save', function(next) {
   this.updatedAt = new Date();
+  // If minValue and maxValue are both 0, mark as inactive
+  if (this.minValue === 0 && this.maxValue === 0) {
+    this.isActive = false;
+  } else {
+    this.isActive = true;
+  }
+  next();
+});
+
+// Also add a pre-findOneAndUpdate middleware
+PairSchema.pre('findOneAndUpdate', function(next) {
+  const update = this.getUpdate() as any;
+  if (update.minValue === 0 && update.maxValue === 0) {
+    update.isActive = false;
+  } else if (update.minValue !== undefined || update.maxValue !== undefined) {
+    update.isActive = true;
+  }
   next();
 });
 

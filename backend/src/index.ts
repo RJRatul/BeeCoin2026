@@ -3,12 +3,15 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import path from 'path';
+import cron from 'node-cron';
 import authRoutes from './routes/authRoutes';
 import pairRoutes from './routes/pairRoutes';
 import transactionRoutes from './routes/transactionRoutes';
 import userRoutes from './routes/userRoutes';
 import uploadRoutes from './routes/uploadRoutes';
+import orderRoutes from './routes/orderRoutes';
 import { errorHandler } from './middleware/errorHandler';
+import { checkOpenOrders } from './controllers/orderController';
 
 dotenv.config();
 
@@ -53,6 +56,7 @@ app.use('/api/pairs', pairRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api', uploadRoutes); // Upload routes
+app.use('/api/orders', orderRoutes);
 
 // Error Handler
 app.use(errorHandler);
@@ -61,10 +65,29 @@ app.use(errorHandler);
 mongoose.connect(process.env.MONGODB_URI as string)
   .then(() => {
     console.log('Connected to MongoDB');
+    
+    // Start the server
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       console.log(`CORS enabled for development`);
     });
+    
+    // Schedule cron job to check open orders every 10 seconds
+    cron.schedule('*/10 * * * * *', async () => {
+      try {
+        await checkOpenOrders();
+      } catch (error) {
+        console.error('Error in cron job:', error);
+      }
+    });
+    
+    console.log('Order checking cron job scheduled (every 10 seconds)');
+    
+    // Initial check on startup
+    setTimeout(async () => {
+      await checkOpenOrders();
+    }, 5000);
+    
   })
   .catch((error) => {
     console.error('MongoDB connection error:', error);
