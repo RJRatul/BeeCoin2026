@@ -147,7 +147,7 @@ export const checkOpenOrders = async (): Promise<void> => {
         order.status = 'closed';
         order.closedAt = new Date();
         await order.save();
-        console.log(`[${new Date().toISOString()}] Order ${order._id} closed — LOSS (price hit minValue $${pair.minValue})`);
+        console.log(`[${new Date().toISOString()}] Order ${order._id} closed — LOSS (price hit minValue)`);
         continue;
       }
 
@@ -156,16 +156,18 @@ export const checkOpenOrders = async (): Promise<void> => {
       let profit = 0;
 
       if (order.type === 'buy') {
-        if (pair.currentValue <= order.targetPrice) {
-          targetReached = true;
-          profit = (order.price - order.targetPrice) * (order.amount / order.price);
-          console.log(`[${new Date().toISOString()}] BUY Order ${order._id} target reached! Entry: $${order.price}, Target: $${order.targetPrice}, Current: $${pair.currentValue}, Profit: $${profit.toFixed(2)}`);
-        }
-      } else if (order.type === 'sell') {
+        // BUY wins when price RISES to/above target
         if (pair.currentValue >= order.targetPrice) {
           targetReached = true;
-          profit = (order.targetPrice - order.price) * (order.amount / order.price);
-          console.log(`[${new Date().toISOString()}] SELL Order ${order._id} target reached! Entry: $${order.price}, Target: $${order.targetPrice}, Current: $${pair.currentValue}, Profit: $${profit.toFixed(2)}`);
+          profit = ((order.targetPrice - order.price) / order.price) * order.amount;
+          console.log(`[${new Date().toISOString()}] BUY Order ${order._id} target reached! Entry: $${order.price}, Target: $${order.targetPrice}, Profit: $${profit.toFixed(2)}`);
+        }
+      } else if (order.type === 'sell') {
+        // SELL wins when price DROPS to/below target
+        if (pair.currentValue <= order.targetPrice) {
+          targetReached = true;
+          profit = ((order.price - order.targetPrice) / order.price) * order.amount;
+          console.log(`[${new Date().toISOString()}] SELL Order ${order._id} target reached! Entry: $${order.price}, Target: $${order.targetPrice}, Profit: $${profit.toFixed(2)}`);
         }
       }
 
