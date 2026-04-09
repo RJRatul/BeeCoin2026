@@ -113,40 +113,62 @@ export const checkOpenOrders = async (): Promise<void> => {
     
     console.log(`[${new Date().toISOString()}] Checking ${openOrders.length} open orders...`);
     
+    const MIN_HOLD_MS = 48 * 60 * 60 * 1000;
+    const MAX_HOLD_MS = 72 * 60 * 60 * 1000;
+
     for (const order of openOrders) {
+      const ageMs = Date.now() - new Date(order.createdAt).getTime();
+
+      // Order must stay open for at least 48 hours
+      if (ageMs < MIN_HOLD_MS) continue;
+
       const pair = await Pair.findById(order.pairId);
-      
-      // If pair is inactive (minValue and maxValue are 0), close order with loss
+
+      // If pair is inactive, close as loss
       if (!pair || !pair.isActive || (pair.minValue === 0 && pair.maxValue === 0)) {
         order.status = 'closed';
         order.closedAt = new Date();
         await order.save();
-        console.log(`[${new Date().toISOString()}] Order ${order._id} closed due to pair inactivity - User lost $${order.amount}`);
+        console.log(`[${new Date().toISOString()}] Order ${order._id} closed due to pair inactivity`);
         continue;
       }
-      
+
+      // Force close at 72 hours — counts as loss
+      if (ageMs >= MAX_HOLD_MS) {
+        order.status = 'closed';
+        order.closedAt = new Date();
+        await order.save();
+        console.log(`[${new Date().toISOString()}] Order ${order._id} force-closed at 72h — LOSS`);
+        continue;
+      }
+
+      // Loss condition: price hit the minimum floor
+      if (pair.currentValue <= pair.minValue) {
+        order.status = 'closed';
+        order.closedAt = new Date();
+        await order.save();
+        console.log(`[${new Date().toISOString()}] Order ${order._id} closed — LOSS (price hit minValue $${pair.minValue})`);
+        continue;
+      }
+
       // Check if target price reached
       let targetReached = false;
       let profit = 0;
-      
+
       if (order.type === 'buy') {
-        // For BUY order: target reached when current price drops to or below target price
         if (pair.currentValue <= order.targetPrice) {
           targetReached = true;
-          // Calculate profit: (entryPrice - targetPrice) * (amount / entryPrice)
           profit = (order.price - order.targetPrice) * (order.amount / order.price);
           console.log(`[${new Date().toISOString()}] BUY Order ${order._id} target reached! Entry: $${order.price}, Target: $${order.targetPrice}, Current: $${pair.currentValue}, Profit: $${profit.toFixed(2)}`);
         }
       } else if (order.type === 'sell') {
-        // For SELL order: target reached when current price rises to or above target price
         if (pair.currentValue >= order.targetPrice) {
           targetReached = true;
-          // Calculate profit: (targetPrice - entryPrice) * (amount / entryPrice)
           profit = (order.targetPrice - order.price) * (order.amount / order.price);
           console.log(`[${new Date().toISOString()}] SELL Order ${order._id} target reached! Entry: $${order.price}, Target: $${order.targetPrice}, Current: $${pair.currentValue}, Profit: $${profit.toFixed(2)}`);
         }
       }
-      
+
       if (targetReached && profit > 0) {
         const user = await User.findById(order.userId);
         if (user) {
@@ -154,7 +176,7 @@ export const checkOpenOrders = async (): Promise<void> => {
           await user.save();
           console.log(`[${new Date().toISOString()}] Added $${profit.toFixed(2)} profit to user ${user.email}. New balance: $${user.balance.toFixed(2)}`);
         }
-        
+
         order.status = 'closed';
         order.closedAt = new Date();
         await order.save();

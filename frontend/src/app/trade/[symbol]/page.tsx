@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
+import { io as socketIO, Socket } from "socket.io-client";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePrice } from "@/contexts/PriceContext";
 import Image from "next/image";
@@ -28,6 +29,7 @@ interface MarketDepth {
   price: number;
   amount: number;
   total: number;
+  type: "green" | "gray" | "red";
 }
 
 export default function TradePairPage() {
@@ -44,9 +46,13 @@ export default function TradePairPage() {
   const [openOrder, setOpenOrder] = useState<Order | null>(null);
   const [marketDepth, setMarketDepth] = useState<MarketDepth[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [targetPriceError, setTargetPriceError] = useState("");
+  const [livePrice, setLivePrice] = useState<number>(0);
 
   // Track the symbol we last successfully loaded so we can reset on symbol change
   const loadedSymbolRef = useRef<string | null>(null);
+  const simulatedPriceRef = useRef<number | null>(null);
+  const socketRef = useRef<Socket | null>(null);
 
   // Reset pair state when symbol changes so we show loading instead of stale data
   useEffect(() => {
@@ -80,6 +86,7 @@ export default function TradePairPage() {
       }
       loadedSymbolRef.current = symbolStr;
       setPair(foundPair);
+      setLivePrice(foundPair.currentValue);
       generateMarketDepth(foundPair);
       setLoading(false);
       fetchOpenOrder();
@@ -104,6 +111,7 @@ export default function TradePairPage() {
       ) {
         loadedSymbolRef.current = symbolStr;
         setPair(directPair);
+        setLivePrice(directPair.currentValue);
         generateMarketDepth(directPair);
         setLoading(false);
         fetchOpenOrder();
@@ -146,6 +154,49 @@ export default function TradePairPage() {
     return () => clearInterval(interval);
   }, [pair, user]);
 
+  // Socket.io — connect when pair and user are ready
+  useEffect(() => {
+    if (!pair || !user) return;
+
+    const socket = socketIO(
+      process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:5000",
+      { transports: ["websocket"] }
+    );
+    socketRef.current = socket;
+
+    // Join the pair room to receive live price updates
+    socket.emit("join_pair", pair.symbol);
+    // Join the private user room to receive order win/loss notifications
+    socket.emit("join_user", user.id);
+
+    // Live price tick from the server
+    socket.on("price_update", ({ price }: { symbol: string; price: number }) => {
+      setLivePrice(price);
+      generateMarketDepth(pair, price);
+    });
+
+    // Order settled — server tells us win or loss
+    socket.on(
+      "order_closed",
+      ({ won, profit, newBalance }: { orderId: string; won: boolean; profit: number; newBalance: number }) => {
+        if (won) {
+          toast.success(`Trade won! +$${profit.toFixed(2)} profit added to your balance.`);
+        } else {
+          toast.error("Trade closed at minimum price — investment lost.");
+        }
+        // Refresh order state and balance
+        fetchOpenOrder();
+        refreshUser();
+      }
+    );
+
+    return () => {
+      socket.emit("leave_pair", pair.symbol);
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [pair, user]);
+
   const refreshUserBalance = async () => {
     try {
       await refreshUser();
@@ -155,19 +206,40 @@ export default function TradePairPage() {
     }
   };
 
-  const generateMarketDepth = (pair: any) => {
-    const { currentValue, minValue, maxValue } = pair;
+  const generateMarketDepth = (p: any, simPrice?: number) => {
+    const { minValue, minPercentage, maxPercentage } = p;
+    const current = simPrice ?? p.currentValue;
+    simulatedPriceRef.current = current;
     const depth: MarketDepth[] = [];
-    for (let i = -5; i <= 5; i++) {
-      const price = currentValue + i * (currentValue * 0.001);
-      if (price >= minValue && price <= maxValue) {
-        depth.push({
-          price,
-          amount: Math.random() * 10,
-          total: Math.random() * 10000,
-        });
-      }
+
+    // Step size based on percentage range — no upper cap
+    const avgPct = ((minPercentage + maxPercentage) / 2) / 100;
+    const aboveStep = current * avgPct;
+
+    // 5 green rows — capped at maxValue to stay realistic
+    for (let i = 1; i <= 5; i++) {
+      const price = parseFloat(Math.min(p.maxValue, current + i * aboveStep).toFixed(6));
+      const amount = parseFloat((Math.random() * 9.9 + 0.1).toFixed(4));
+      depth.push({ price, amount, total: parseFloat((price * amount).toFixed(4)), type: "green" });
     }
+
+    // 1 gray row — exactly at simulated current (always the middle row)
+    const grayAmount = parseFloat((Math.random() * 9.9 + 0.1).toFixed(4));
+    depth.push({
+      price: parseFloat(current.toFixed(6)),
+      amount: grayAmount,
+      total: parseFloat((current * grayAmount).toFixed(4)),
+      type: "gray",
+    });
+
+    // 5 red rows — go down to minValue floor
+    const belowStep = (current - minValue) / 5;
+    for (let i = 1; i <= 5; i++) {
+      const price = parseFloat(Math.max(minValue, current - i * belowStep).toFixed(6));
+      const amount = parseFloat((Math.random() * 9.9 + 0.1).toFixed(4));
+      depth.push({ price, amount, total: parseFloat((price * amount).toFixed(4)), type: "red" });
+    }
+
     setMarketDepth(depth.sort((a, b) => b.price - a.price));
   };
 
@@ -198,8 +270,8 @@ export default function TradePairPage() {
       toast.error("Please enter a valid target price");
       return;
     }
-    if (targetPriceNum > pair.maxValue || targetPriceNum < pair.minValue) {
-      toast.error(`Target price must be between ${pair.minValue} and ${pair.maxValue}`);
+    if (targetPriceNum < pair.minValue) {
+      toast.error(`Target price must be at least $${pair.minValue.toLocaleString()}`);
       return;
     }
     if (activeTab === "buy" && amountNum > (user?.balance || 0)) {
@@ -232,7 +304,15 @@ export default function TradePairPage() {
       }
     } catch (error: any) {
       console.error("Error creating order:", error);
-      toast.error(error.response?.data?.message || "Failed to create order");
+      const msg =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        (typeof error.response?.data === "string" ? error.response.data : null) ||
+        "Failed to create order";
+      toast.error(msg);
+      if (error.response?.status === 400) {
+        await fetchOpenOrder();
+      }
     } finally {
       setSubmitting(false);
     }
@@ -241,9 +321,9 @@ export default function TradePairPage() {
   const getPriceChange = () => {
     if (!pair) return { isPositive: false, percentageChange: "0" };
     const avgValue = (pair.minValue + pair.maxValue) / 2;
-    const percentageChange = ((pair.currentValue - avgValue) / avgValue) * 100;
+    const percentageChange = ((livePrice - avgValue) / avgValue) * 100;
     return {
-      isPositive: pair.currentValue > avgValue,
+      isPositive: livePrice > avgValue,
       percentageChange: Math.abs(percentageChange).toFixed(2),
     };
   };
@@ -336,7 +416,7 @@ export default function TradePairPage() {
             </div>
 
             <div className="text-right">
-              <p className="text-white font-bold text-lg">${pair.currentValue.toLocaleString()}</p>
+              <p className="text-white font-bold text-lg">${livePrice.toLocaleString()}</p>
               <p className={`text-sm ${isPositive ? "text-green-400" : "text-red-400"}`}>
                 {isPositive ? "+" : ""}{percentageChange}%
               </p>
@@ -344,7 +424,15 @@ export default function TradePairPage() {
           </div>
 
           {/* Balance Display */}
-          <div className="bg-gray-800/50 rounded-xl p-4 mb-6">
+          <div
+            className={`rounded-xl p-4 mb-6 transition-all duration-700 ${
+              openOrder && livePrice > openOrder.price
+                ? "trade-card-profit"
+                : openOrder && livePrice <= openOrder.price
+                ? "trade-card-loss"
+                : "bg-gray-800/50"
+            }`}
+          >
             <div className="flex justify-between items-center">
               <span className="text-gray-400 text-sm">Available Balance</span>
               <span className="text-white font-bold text-2xl">
@@ -380,7 +468,7 @@ export default function TradePairPage() {
             {/* Market Depth Table */}
             <div className="bg-gray-800/50 rounded-xl overflow-hidden">
               <div className="p-3 bg-gray-700/50 border-b border-gray-600">
-                <h3 className="text-white font-semibold">Market Depth</h3>
+                <h3 className="text-white font-semibold">Market Value</h3>
               </div>
               <div className="grid grid-cols-3 gap-2 p-3 bg-gray-700/30 text-gray-400 text-xs font-semibold border-b border-gray-600">
                 <div>Price (USDT)</div>
@@ -389,22 +477,27 @@ export default function TradePairPage() {
               </div>
               <div className="max-h-96 overflow-y-auto">
                 {marketDepth.map((depth, index) => {
-                  const isRed = depth.price < pair.currentValue;
-                  const isGreen = depth.price > pair.currentValue;
+                  const isGray = depth.type === "gray";
+                  const isGreen = depth.type === "green";
+                  const isRed = depth.type === "red";
                   return (
                     <div
                       key={index}
                       className={`grid grid-cols-3 gap-2 p-3 text-sm border-b border-gray-700/50 ${
-                        isRed ? "bg-red-500/5 hover:bg-red-500/10"
-                          : isGreen ? "bg-green-500/5 hover:bg-green-500/10"
-                          : "hover:bg-gray-700/30"
+                        isGray ? "bg-gray-600/30"
+                          : isRed ? "bg-red-500/5 hover:bg-red-500/10"
+                          : "bg-green-500/5 hover:bg-green-500/10"
                       } transition-colors`}
                     >
-                      <div className={isRed ? "text-red-400 font-medium" : isGreen ? "text-green-400 font-medium" : "text-white"}>
-                        ${depth.price.toFixed(2)}
+                      <div className={
+                        isGray ? "text-gray-300 font-bold" :
+                        isGreen ? "text-green-400 font-medium" :
+                        "text-red-400 font-medium"
+                      }>
+                        ${depth.price.toFixed(6)}
                       </div>
                       <div className="text-right text-gray-300">{depth.amount.toFixed(4)}</div>
-                      <div className="text-right text-gray-300">${depth.total.toFixed(2)}</div>
+                      <div className="text-right text-gray-300">${depth.total.toFixed(4)}</div>
                     </div>
                   );
                 })}
@@ -420,14 +513,29 @@ export default function TradePairPage() {
                 <input
                   type="number"
                   value={targetPrice}
-                  onChange={(e) => setTargetPrice(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setTargetPrice(val);
+                    const num = parseFloat(val);
+                    if (val && !isNaN(num) && num < pair.minValue) {
+                      setTargetPriceError(`Target price must be at least $${pair.minValue.toLocaleString()}`);
+                    } else {
+                      setTargetPriceError("");
+                    }
+                  }}
                   placeholder={`Min: ${pair.minValue} | Max: ${pair.maxValue}`}
-                  className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 text-base"
+                  className={`w-full px-4 py-3 bg-gray-700 border rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 text-base ${
+                    targetPriceError ? "border-red-500" : "border-gray-600"
+                  }`}
                   step="0.01"
                 />
-                <p className="text-gray-500 text-xs mt-1">
-                  Range: ${pair.minValue.toLocaleString()} - ${pair.maxValue.toLocaleString()}
-                </p>
+                {targetPriceError ? (
+                  <p className="text-red-400 text-xs mt-1">{targetPriceError}</p>
+                ) : (
+                  <p className="text-gray-500 text-xs mt-1">
+                    Range: ${pair.minValue.toLocaleString()} - ${pair.maxValue.toLocaleString()}
+                  </p>
+                )}
               </div>
 
               <div className="mb-5">
@@ -455,7 +563,17 @@ export default function TradePairPage() {
 
               <button
                 onClick={handleSubmitOrder}
-                disabled={submitting || !!openOrder}
+                disabled={
+                  submitting ||
+                  !!openOrder ||
+                  !amount ||
+                  parseFloat(amount) <= 0 ||
+                  !targetPrice ||
+                  parseFloat(targetPrice) <= 0 ||
+                  !!targetPriceError ||
+                  parseFloat(targetPrice) < pair.minValue ||
+                  (activeTab === "buy" && parseFloat(amount) > (user?.balance || 0))
+                }
                 className={`w-full py-3 rounded-lg font-semibold text-base transition ${
                   activeTab === "buy" ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"
                 } text-white disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -489,14 +607,14 @@ export default function TradePairPage() {
                   <p className="text-white font-semibold">${openOrder.targetPrice.toLocaleString()}</p>
                 </div>
               </div>
-              <div className="mt-3">
+              {/* <div className="mt-3">
                 <div className="flex justify-between text-sm mb-1">
                   <span className="text-gray-400">Progress to Target</span>
                   <span className="text-white">
                     {Math.min(100, Math.max(0,
                       openOrder.type === "buy"
-                        ? ((openOrder.targetPrice - pair.currentValue) / (openOrder.targetPrice - openOrder.price)) * 100
-                        : ((pair.currentValue - openOrder.targetPrice) / (openOrder.price - openOrder.targetPrice)) * 100
+                        ? ((openOrder.targetPrice - livePrice) / (openOrder.targetPrice - openOrder.price)) * 100
+                        : ((livePrice - openOrder.targetPrice) / (openOrder.price - openOrder.targetPrice)) * 100
                     )).toFixed(0)}%
                   </span>
                 </div>
@@ -512,7 +630,7 @@ export default function TradePairPage() {
                     }}
                   />
                 </div>
-              </div>
+              </div> */}
             </div>
           )}
 
@@ -530,7 +648,7 @@ export default function TradePairPage() {
               </div>
               <div>
                 <p className="text-gray-500 text-xs">Current Price</p>
-                <p className="text-white font-semibold">${pair.currentValue.toLocaleString()}</p>
+                <p className="text-white font-semibold">${livePrice.toLocaleString()}</p>
               </div>
             </div>
           </div>

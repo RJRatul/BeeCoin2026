@@ -17,6 +17,8 @@ import {
   FaBars,
   FaTimes,
   FaExchangeAlt,
+  FaHistory,
+  FaHeadset,
 } from "react-icons/fa";
 import { createPortal } from "react-dom";
 
@@ -55,6 +57,8 @@ export default function PrivateLayout({ children }: { children: React.ReactNode 
     { href: "/trade", icon: <FaChartLine className="w-7 h-7" />, label: "Trade" },
     { href: "/deposit", icon: <FaWallet className="w-7 h-7" />, label: "Deposit" },
     { href: "/withdrawal", icon: <FaExchangeAlt className="w-7 h-7" />, label: "Withdrawal" },
+    { href: "/trade-history", icon: <FaHistory className="w-7 h-7" />, label: "Trade History" },
+    { href: "/support", icon: <FaHeadset className="w-7 h-7" />, label: "Support" },
     { href: "/account", icon: <FaUser className="w-7 h-7" />, label: "Account" },
   ];
 

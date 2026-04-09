@@ -93,17 +93,24 @@ export default function TradePage() {
         <div className="max-w-md mx-auto">
           {/* Account Header */}
           <div className="mb-6">
-            <div className="text-center mb-8">
-              <h1 className="text-white text-2xl font-bold mb-2">
-                {getUserName()}
-              </h1>
-              <div className="text-white text-4xl font-bold mb-2">
-                ${user?.balance?.toLocaleString() || '0.00'}
-              </div>
-              <div className="text-green-400 text-lg font-semibold">
-                +5.01%
-              </div>
-            </div>
+            {(() => {
+              const activePair = openOrder ? pairs.find((p: any) => p.symbol === openOrder.pairSymbol) : null;
+              const isProfit = activePair && activePair.currentValue > openOrder?.price;
+              const isLoss = activePair && activePair.currentValue <= openOrder?.price;
+              return (
+                <div
+                  className={`text-center mb-8 rounded-2xl py-7 px-4 transition-all duration-700 ${
+                    isProfit ? 'trade-card-profit' : isLoss ? 'trade-card-loss' : ''
+                  }`}
+                >
+                  <h1 className="text-white text-2xl font-bold mb-2">{getUserName()}</h1>
+                  <div className="text-white text-4xl font-bold mb-2">
+                    ${user?.balance?.toLocaleString() || '0.00'}
+                  </div>
+                  <div className="text-green-400 text-lg font-semibold">+5.01%</div>
+                </div>
+              );
+            })()}
 
             {/* Action Buttons */}
             <div className="flex justify-between items-center gap-4 mb-8">
