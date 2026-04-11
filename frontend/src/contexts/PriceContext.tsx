@@ -47,7 +47,7 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
 
   const fetchPairs = async () => {
     try {
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/pairs`);
+      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || '/api'}/pairs`);
       const pairsWithHoldings = response.data.pairs.map((pair: Pair) => ({
         ...pair,
         holdings: getRandomHoldings(pair.symbol),

@@ -32,7 +32,7 @@ export default function UsersPage() {
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('adminToken');
-      const response = await axios.get('http://localhost:5000/api/users', {
+      const response = await axios.get('/api/users', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setUsers(response.data.users);
@@ -53,7 +53,7 @@ export default function UsersPage() {
     try {
       const token = localStorage.getItem('adminToken');
       await axios.put(
-        `http://localhost:5000/api/users/${userId}/status`,
+        `/api/users/${userId}/status`,
         { status: newStatus },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -76,7 +76,7 @@ export default function UsersPage() {
     try {
       const token = localStorage.getItem('adminToken');
       const response = await axios.put(
-        `http://localhost:5000/api/users/${selectedUser._id}/balance`,
+        `/api/users/${selectedUser._id}/balance`,
         { balance: parseFloat(newBalance) },
         { headers: { Authorization: `Bearer ${token}` } }
       );

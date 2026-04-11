@@ -24,10 +24,10 @@ export default function AdminDashboard() {
       const config = { headers: { Authorization: `Bearer ${token}` } };
 
       const [usersRes, depositsRes, withdrawalsRes, pairsRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/users', config),
-        axios.get('http://localhost:5000/api/transactions/all', config),
-        axios.get('http://localhost:5000/api/transactions/all', config),
-        axios.get('http://localhost:5000/api/pairs'),
+        axios.get('/api/users', config),
+        axios.get('/api/transactions/all', config),
+        axios.get('/api/transactions/all', config),
+        axios.get('/api/pairs'),
       ]);
 
       const deposits = depositsRes.data.transactions.filter((t: any) => t.type === 'deposit' && t.status === 'approved');

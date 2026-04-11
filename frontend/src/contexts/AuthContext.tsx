@@ -55,7 +55,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 axios.defaults.withCredentials = true;
 
 export const useAuth = () => {

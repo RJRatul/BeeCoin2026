@@ -28,7 +28,7 @@ export default function TradePage() {
 
   const fetchOpenOrder = async () => {
     try {
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/orders/open`, {
+      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || '/api'}/orders/open`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.order) {

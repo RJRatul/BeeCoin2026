@@ -29,7 +29,7 @@ export default function TradeHistoryPage() {
     const fetchHistory = async () => {
       try {
         const res = await axios.get(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/orders/history`,
+          `${process.env.NEXT_PUBLIC_API_URL || "/api"}/orders/history`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setOrders(res.data.orders || []);

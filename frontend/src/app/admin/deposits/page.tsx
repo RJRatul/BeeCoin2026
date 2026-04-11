@@ -28,7 +28,7 @@ export default function DepositsPage() {
   const fetchDeposits = async () => {
     try {
       const token = localStorage.getItem('adminToken');
-      const response = await axios.get('http://localhost:5000/api/transactions/all', {
+      const response = await axios.get('/api/transactions/all', {
         headers: { Authorization: `Bearer ${token}` }
       });
       const deposits = response.data.transactions.filter((t: Transaction) => t.type === 'deposit');
@@ -45,7 +45,7 @@ export default function DepositsPage() {
     try {
       const token = localStorage.getItem('adminToken');
       await axios.put(
-        `http://localhost:5000/api/transactions/${id}/approve`,
+        `/api/transactions/${id}/approve`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -61,7 +61,7 @@ export default function DepositsPage() {
     try {
       const token = localStorage.getItem('adminToken');
       await axios.put(
-        `http://localhost:5000/api/transactions/${id}/reject`,
+        `/api/transactions/${id}/reject`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );

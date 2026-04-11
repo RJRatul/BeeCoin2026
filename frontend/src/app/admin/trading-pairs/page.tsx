@@ -44,7 +44,7 @@ export default function TradingPairsPage() {
 
   const fetchPairs = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/pairs');
+      const response = await axios.get('/api/pairs');
       setPairs(response.data.pairs);
     } catch (error) {
       console.error('Error fetching pairs:', error);
@@ -59,7 +59,7 @@ export default function TradingPairsPage() {
     formData.append('image', file);
     
     const token = localStorage.getItem('adminToken');
-    const response = await axios.post('http://localhost:5000/api/upload', formData, {
+    const response = await axios.post('/api/upload', formData, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'multipart/form-data'
@@ -80,7 +80,7 @@ export default function TradingPairsPage() {
       }
       
       await axios.post(
-        'http://localhost:5000/api/pairs',
+        '/api/pairs',
         {
           ...formData,
           image: imageUrl,
@@ -114,7 +114,7 @@ export default function TradingPairsPage() {
       }
       
       await axios.put(
-        `http://localhost:5000/api/pairs/${editingPair._id}`,
+        `/api/pairs/${editingPair._id}`,
         {
           ...formData,
           image: imageUrl,
@@ -140,7 +140,7 @@ export default function TradingPairsPage() {
     
     try {
       const token = localStorage.getItem('adminToken');
-      await axios.delete(`http://localhost:5000/api/pairs/${id}`, {
+      await axios.delete(`/api/pairs/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       toast.success('Pair deleted successfully');
@@ -155,7 +155,7 @@ export default function TradingPairsPage() {
     try {
       const token = localStorage.getItem('adminToken');
       await axios.put(
-        `http://localhost:5000/api/pairs/${id}`,
+        `/api/pairs/${id}`,
         { isRecommended: !currentStatus },
         { headers: { Authorization: `Bearer ${token}` } }
       );

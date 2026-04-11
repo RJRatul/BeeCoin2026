@@ -98,7 +98,7 @@ export default function TradePairPage() {
   const loadPairDirectly = async (symbolStr: string) => {
     try {
       const response = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/pairs`
+        `${process.env.NEXT_PUBLIC_API_URL || "/api"}/pairs`
       );
       const directPair = response.data.pairs.find(
         (p: any) => p.symbol === symbolStr
@@ -129,7 +129,7 @@ export default function TradePairPage() {
   const fetchOpenOrder = async () => {
     try {
       const response = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/orders/open`,
+        `${process.env.NEXT_PUBLIC_API_URL || "/api"}/orders/open`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const order = response.data.order;
@@ -282,7 +282,7 @@ export default function TradePairPage() {
     setSubmitting(true);
     try {
       const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/orders/create`,
+        `${process.env.NEXT_PUBLIC_API_URL || "/api"}/orders/create`,
         {
           pairId: pair._id,
           pairSymbol: pair.symbol,
