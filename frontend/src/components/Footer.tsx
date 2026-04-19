@@ -5,24 +5,24 @@ import { FaTwitter, FaTelegram, FaDiscord, FaGithub } from "react-icons/fa";
 export default function Footer() {
   return (
     <footer className="bg-gray-900 border-t border-gray-800">
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+      {/* <div className="container mx-auto px-4 py-12"> */}
+        {/* <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div className="col-span-1 md:col-span-2">
             <div className="flex items-center mb-4">
               <div className="w-18 h-10 flex items-center justify-center relative">
                 <Image
                   src="/logo.png"
-                  alt="BeeCoin Logo"
+                  alt="Cryptax Logo"
                   fill
                   className="object-contain p-1"
                 />
               </div>
               <span className="text-2xl font-bold bg-gradient-to-r from-green-400 to-yellow-500 bg-clip-text text-transparent">
-                BeeCoin
+                Cryptax
               </span>
             </div>
             <p className="text-gray-400 mb-6 max-w-md">
-              Discover the most exciting meme coins in the crypto space. Track prices, follow trends, and join the community-driven revolution.
+              Trade live cryptocurrencies in real time. Fast execution, reliable prices, and a secure platform trusted by traders worldwide.
             </p>
             <div className="flex space-x-4">
               <a
@@ -127,13 +127,13 @@ export default function Footer() {
               </li>
             </ul>
           </div>
-        </div>
+        </div> */}
 
-        <div className="border-t border-gray-800 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
-          <p className="text-gray-400 text-sm">
-            © {new Date().getFullYear()} BeeCoin. All rights reserved.
+        <div className="border-t border-gray-800 flex flex-col md:flex-row justify-center items-center">
+          <p className="text-gray-400 text-sm p-4">
+            © {new Date().getFullYear()} Cryptax. All rights reserved.
           </p>
-          <div className="flex space-x-6 mt-4 md:mt-0">
+          {/* <div className="flex space-x-6 mt-4 md:mt-0">
             <Link
               href="/privacy"
               className="text-gray-400 hover:text-green-400 text-sm transition-colors"
@@ -152,9 +152,9 @@ export default function Footer() {
             >
               Cookies
             </Link>
-          </div>
+          </div> */}
         </div>
-      </div>
+      {/* </div> */}
     </footer>
   );
 }

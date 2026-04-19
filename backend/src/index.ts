@@ -112,7 +112,7 @@ mongoose.connect(process.env.MONGODB_URI as string)
     // (the simulator also settles orders on each tick, this handles edge cases)
     cron.schedule('*/5 * * * * *', async () => {
       try {
-        await checkOpenOrders();
+        await checkOpenOrders(io);
       } catch (error) {
         console.error('Error in cron job:', error);
       }
@@ -122,7 +122,7 @@ mongoose.connect(process.env.MONGODB_URI as string)
 
     // Initial check on startup
     setTimeout(async () => {
-      await checkOpenOrders();
+      await checkOpenOrders(io);
     }, 2000);
   })
   .catch((error) => {

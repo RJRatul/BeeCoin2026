@@ -43,8 +43,8 @@ export default function AccountSuspended({ email, userId }: AccountSuspendedProp
 
   const getSuspendedMailToLink = () => {
     const subject = `Account Suspension: ${email || 'SUPPORT_REQUEST'}`;
-    const body = `Hello BeeCoin Support,\n\nMy account has been suspended. Please assist me with reactivating my account.\n\nRegistered Email: ${email || 'N/A'}\nUser ID: ${userId || 'N/A'}\n\nThank you.`;
-    return `mailto:beecoin.aitrading@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const body = `Hello Cryptax Support,\n\nMy account has been suspended. Please assist me with reactivating my account.\n\nRegistered Email: ${email || 'N/A'}\nUser ID: ${userId || 'N/A'}\n\nThank you.`;
+    return `mailto:support@cryptax.live?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
   // Format time for display (MM:SS)
@@ -98,7 +98,7 @@ export default function AccountSuspended({ email, userId }: AccountSuspendedProp
                 Support Email:
               </span>
               <button
-                onClick={() => copyToClipboard("beecoin.aitrading@gmail.com")}
+                onClick={() => copyToClipboard("support@cryptax.live")}
                 className="cursor-pointer flex items-center space-x-1 text-blue-400 hover:text-blue-300 transition-colors text-sm"
               >
                 {copied ? (
@@ -115,7 +115,7 @@ export default function AccountSuspended({ email, userId }: AccountSuspendedProp
               </button>
             </div>
             <code className="text-blue-400 text-sm break-all bg-gray-600/30 px-2 py-1 rounded">
-              beecoin.aitrading@gmail.com
+              support@cryptax.live
             </code>
           </div>
 
@@ -149,7 +149,7 @@ export default function AccountSuspended({ email, userId }: AccountSuspendedProp
             <p>If the email client doesn&apos;t open automatically:</p>
             <ol className="list-decimal list-inside mt-1 space-y-1">
               <li>Open your email client manually</li>
-              <li>Send email to: <strong>beecoin.aitrading@gmail.com</strong></li>
+              <li>Send email to: <strong>support@cryptax.live</strong></li>
               <li>Subject: <strong>Account Suspension: {email?.toUpperCase() || 'YOUR_EMAIL'}</strong></li>
               <li>Include your registered email and user ID in the message</li>
             </ol>

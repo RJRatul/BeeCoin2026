@@ -10,6 +10,8 @@ export interface IOrder extends Document {
   price: number;
   targetPrice: number;
   status: 'open' | 'closed' | 'cancelled';
+  profit?: number;
+  won?: boolean;
   closedAt?: Date;
   createdAt: Date;
 }
@@ -55,6 +57,14 @@ const OrderSchema = new Schema<IOrder>({
     type: String,
     enum: ['open', 'closed', 'cancelled'],
     default: 'open'
+  },
+  profit: {
+    type: Number,
+    default: 0
+  },
+  won: {
+    type: Boolean,
+    default: false
   },
   closedAt: {
     type: Date

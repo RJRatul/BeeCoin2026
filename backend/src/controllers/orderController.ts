@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Server as SocketServer } from 'socket.io';
 import Order from '../models/Order';
 import User from '../models/User';
 import Pair from '../models/Pair';
@@ -29,17 +30,25 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    // Check balance for buy orders
-    if (type === 'buy' && user.balance < amount) {
+    // Validate target price direction
+    if (type === 'buy' && targetPrice <= price) {
+      res.status(400).json({ message: 'Buy target price must be above the current entry price' });
+      return;
+    }
+    if (type === 'sell' && targetPrice >= price) {
+      res.status(400).json({ message: 'Sell target price must be below the current entry price' });
+      return;
+    }
+
+    // Check balance for all order types
+    if (user.balance < amount) {
       res.status(400).json({ message: 'Insufficient balance' });
       return;
     }
 
-    // Deduct balance for buy orders
-    if (type === 'buy') {
-      user.balance -= amount;
-      await user.save();
-    }
+    // Deduct balance immediately — refunded only on win
+    user.balance -= amount;
+    await user.save();
 
     const order = await Order.create({
       userId,
@@ -106,83 +115,81 @@ export const closeOrder = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
-// Check and update all open orders
-export const checkOpenOrders = async (): Promise<void> => {
+// Check and update all open orders (cron fallback — runs every 5s to catch anything the simulator missed)
+export const checkOpenOrders = async (io?: SocketServer): Promise<void> => {
   try {
     const openOrders = await Order.find({ status: 'open' });
-    
-    console.log(`[${new Date().toISOString()}] Checking ${openOrders.length} open orders...`);
-    
-    const MIN_HOLD_MS = 48 * 60 * 60 * 1000;
-    const MAX_HOLD_MS = 72 * 60 * 60 * 1000;
 
     for (const order of openOrders) {
-      const ageMs = Date.now() - new Date(order.createdAt).getTime();
-
-      // Order must stay open for at least 48 hours
-      if (ageMs < MIN_HOLD_MS) continue;
-
       const pair = await Pair.findById(order.pairId);
 
-      // If pair is inactive, close as loss
+      // Pair deleted or admin zeroed it — close as loss immediately
       if (!pair || !pair.isActive || (pair.minValue === 0 && pair.maxValue === 0)) {
-        order.status = 'closed';
+        order.status   = 'closed';
         order.closedAt = new Date();
+        order.profit   = 0;
+        order.won      = false;
         await order.save();
-        console.log(`[${new Date().toISOString()}] Order ${order._id} closed due to pair inactivity`);
+        console.log(`[Cron] Order ${order._id} closed — pair inactive/zeroed — LOSS`);
+        if (io) {
+          const u = await User.findById(order.userId);
+          io.to(`user:${order.userId.toString()}`).emit('order_closed', {
+            orderId: order._id, won: false, profit: 0,
+            newBalance: parseFloat((u?.balance ?? 0).toFixed(2)),
+          });
+        }
         continue;
       }
 
-      // Force close at 72 hours — counts as loss
-      if (ageMs >= MAX_HOLD_MS) {
-        order.status = 'closed';
-        order.closedAt = new Date();
-        await order.save();
-        console.log(`[${new Date().toISOString()}] Order ${order._id} force-closed at 72h — LOSS`);
-        continue;
-      }
-
-      // Loss condition: price hit the minimum floor
-      if (pair.currentValue <= pair.minValue) {
-        order.status = 'closed';
-        order.closedAt = new Date();
-        await order.save();
-        console.log(`[${new Date().toISOString()}] Order ${order._id} closed — LOSS (price hit minValue)`);
-        continue;
-      }
-
-      // Check if target price reached
-      let targetReached = false;
+      const currentPrice = pair.currentValue;
+      let closed = false;
+      let won = false;
       let profit = 0;
 
       if (order.type === 'buy') {
-        // BUY wins when price RISES to/above target
-        if (pair.currentValue >= order.targetPrice) {
-          targetReached = true;
+        if (currentPrice >= order.targetPrice) {
           profit = ((order.targetPrice - order.price) / order.price) * order.amount;
-          console.log(`[${new Date().toISOString()}] BUY Order ${order._id} target reached! Entry: $${order.price}, Target: $${order.targetPrice}, Profit: $${profit.toFixed(2)}`);
+          if (profit <= 0) profit = ((currentPrice - order.price) / order.price) * order.amount;
+          profit = Math.max(0, profit);
+          closed = true; won = true;
         }
+        // No natural loss — price is floored at minValue by the simulator
       } else if (order.type === 'sell') {
-        // SELL wins when price DROPS to/below target
-        if (pair.currentValue <= order.targetPrice) {
-          targetReached = true;
+        if (currentPrice <= order.targetPrice) {
           profit = ((order.price - order.targetPrice) / order.price) * order.amount;
-          console.log(`[${new Date().toISOString()}] SELL Order ${order._id} target reached! Entry: $${order.price}, Target: $${order.targetPrice}, Profit: $${profit.toFixed(2)}`);
+          if (profit <= 0) profit = ((order.price - currentPrice) / order.price) * order.amount;
+          profit = Math.max(0, profit);
+          closed = true; won = true;
         }
+        // No natural loss — price is floored at minValue by the simulator
       }
 
-      if (targetReached && profit > 0) {
-        const user = await User.findById(order.userId);
-        if (user) {
-          user.balance += profit;
-          await user.save();
-          console.log(`[${new Date().toISOString()}] Added $${profit.toFixed(2)} profit to user ${user.email}. New balance: $${user.balance.toFixed(2)}`);
-        }
+      if (!closed) continue;
 
-        order.status = 'closed';
-        order.closedAt = new Date();
-        await order.save();
-        console.log(`[${new Date().toISOString()}] Order ${order._id} closed successfully with profit: $${profit.toFixed(2)}`);
+      const user = await User.findById(order.userId);
+      const roundedProfit = parseFloat(profit.toFixed(2));
+
+      if (user && won) {
+        user.balance += order.amount + roundedProfit;
+        await user.save();
+        console.log(`[Cron] Order ${order._id} WIN — profit: $${roundedProfit}, new balance: $${user.balance.toFixed(2)}`);
+      } else {
+        console.log(`[Cron] Order ${order._id} LOSS`);
+      }
+
+      order.status   = 'closed';
+      order.closedAt = new Date();
+      order.profit   = won ? roundedProfit : 0;
+      order.won      = won;
+      await order.save();
+
+      if (io) {
+        io.to(`user:${order.userId.toString()}`).emit('order_closed', {
+          orderId: order._id,
+          won,
+          profit: roundedProfit,
+          newBalance: parseFloat((user?.balance ?? 0).toFixed(2)),
+        });
       }
     }
   } catch (error) {
@@ -210,13 +217,11 @@ export const cancelOrder = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Refund amount for cancelled buy orders
-    if (order.type === 'buy') {
-      const user = await User.findById(order.userId);
-      if (user) {
-        user.balance += order.amount;
-        await user.save();
-      }
+    // Refund full amount for any cancelled order
+    const user = await User.findById(order.userId);
+    if (user) {
+      user.balance += order.amount;
+      await user.save();
     }
 
     order.status = 'cancelled';

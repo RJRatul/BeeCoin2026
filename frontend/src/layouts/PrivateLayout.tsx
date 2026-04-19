@@ -107,14 +107,14 @@ export default function PrivateLayout({ children }: { children: React.ReactNode 
                 <div className="w-14 h-10 relative">
                   <Image 
                     src="/logo.png" 
-                    alt="BeeCoin Logo" 
+                    alt="Cryptax Logo"
                     fill 
                     className="object-contain" 
                     priority
                   />
                 </div>
                 <span className="text-xs font-bold bg-gradient-to-r from-green-400 to-yellow-400 bg-clip-text text-transparent text-center leading-tight">
-                  BeeCoin
+                  Cryptax
                 </span>
               </div>
             </div>

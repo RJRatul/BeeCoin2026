@@ -68,7 +68,7 @@ export default function AdminLoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="mt-1 block w-full px-3 py-2 bg-primary border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-accent focus:border-accent"
-                placeholder="admin@beecoin.com"
+                placeholder="admin@cryptax.com"
               />
             </div>
             <div>
@@ -101,7 +101,7 @@ export default function AdminLoginPage() {
         
         <div className="text-center text-sm text-gray-400">
           <p>Demo Admin Credentials:</p>
-          <p>Email: admin@beecoin.com</p>
+          <p>Email: admin@cryptax.com</p>
           <p>Password: admin123</p>
         </div>
       </div>

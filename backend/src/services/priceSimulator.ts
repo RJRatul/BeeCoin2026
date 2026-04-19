@@ -3,66 +3,49 @@ import Pair from '../models/Pair';
 import Order from '../models/Order';
 import User from '../models/User';
 
-const TICK_MS       = 10000;              // 10 seconds per tick
-const MIN_HOLD_MS   = 48 * 60 * 60 * 1000; // 48 hours
-const MAX_HOLD_MS   = 72 * 60 * 60 * 1000; // 72 hours
+const TICK_MS = 60_000; // 1 minute per tick
 
-// In-memory store of the latest simulated price per pairId
 const simulatedPrices = new Map<string, number>();
 
 export const startPriceSimulator = (io: Server): void => {
-  console.log('[PriceSimulator] Starting...');
+  console.log('[PriceSimulator] Starting (1 min interval)...');
 
   setInterval(async () => {
     try {
       const pairs = await Pair.find({ isActive: true });
 
       for (const pair of pairs) {
-        const { minValue, maxValue, minPercentage, maxPercentage } = pair;
         const pairId = pair._id.toString();
 
-        // Fetch all open orders for this pair once per tick
-        const openOrders = await Order.find({ pairId, status: 'open' });
-
-        // ── Determine upper price bound ─────────────────────────────────────
-        // While an order is < 48h old, keep the simulated price BELOW the
-        // target so the UI never shows price > target while order is still locked.
-        // After 48h the cap is lifted and normal settlement can fire.
-        const now = Date.now();
-        const youngOrders = openOrders.filter(
-          o => now - new Date(o.createdAt).getTime() < MIN_HOLD_MS
-        );
-
-        let upperBound = maxValue;
-        if (youngOrders.length > 0) {
-          const minTarget = Math.min(...youngOrders.map(o => o.targetPrice));
-          // Stay just below the closest target (0.2% margin)
-          upperBound = Math.min(maxValue, minTarget * 0.998);
+        // Admin zeroed the pair — force-close all orders as loss
+        if (pair.minValue === 0 && pair.maxValue === 0) {
+          const openOrders = await Order.find({ pairId, status: 'open' });
+          for (const order of openOrders) {
+            await closeSingleOrderAsLoss(io, order);
+          }
+          pair.currentValue = 0;
+          await pair.save();
+          io.to(`pair:${pair.symbol}`).emit('price_update', { symbol: pair.symbol, price: 0 });
+          continue;
         }
 
-        // ── Calculate next simulated price ──────────────────────────────────
         const prev = simulatedPrices.get(pairId) ?? pair.currentValue;
-        const pct  = (minPercentage + Math.random() * (maxPercentage - minPercentage)) / 100;
-        const direction = Math.random() < 0.5 ? 1 : -1;
+        if (prev <= 0) {
+          simulatedPrices.set(pairId, pair.minValue || pair.currentValue);
+          continue;
+        }
 
-        const next = parseFloat(
-          Math.min(upperBound, Math.max(minValue, prev + direction * prev * pct)).toFixed(6)
-        );
+        const openOrders = await Order.find({ pairId, status: 'open' });
+        const next = computeNextPrice(prev, openOrders, pair.minPercentage, pair.maxPercentage, pair.minValue);
 
         simulatedPrices.set(pairId, next);
-
-        // Persist so REST API and cron fallback see the live price
         pair.currentValue = next;
         await pair.save();
 
-        // Broadcast to all clients watching this pair's room
-        io.to(`pair:${pair.symbol}`).emit('price_update', {
-          symbol: pair.symbol,
-          price: next,
-        });
+        io.to(`pair:${pair.symbol}`).emit('price_update', { symbol: pair.symbol, price: next });
+        console.log(`[PriceSimulator] ${pair.symbol} price: ${next.toFixed(4)} (prev: ${prev.toFixed(4)}, floor: ${pair.minValue})`);
 
-        // Settle mature orders
-        await settleOrders(io, pairId, next, minValue, openOrders);
+        await settleOrders(io, next, openOrders);
       }
     } catch (err) {
       console.error('[PriceSimulator] Tick error:', err);
@@ -70,71 +53,123 @@ export const startPriceSimulator = (io: Server): void => {
   }, TICK_MS);
 };
 
-const settleOrders = async (
-  io: Server,
-  pairId: string,
+// Compute next price — bounded by minValue floor, biased to keep orders alive
+const computeNextPrice = (
   currentPrice: number,
-  minValue: number,
-  orders: any[]
-): Promise<void> => {
-  const now = Date.now();
+  openOrders: any[],
+  minPct: number,
+  maxPct: number,
+  floorPrice: number
+): number => {
+  const pct = (minPct + Math.random() * (maxPct - minPct)) / 100;
+  const moveAmount = currentPrice * pct;
 
+  const buyTargets = openOrders
+    .filter(o => o.type === 'buy' && o.targetPrice > currentPrice)
+    .map(o => o.targetPrice as number);
+
+  const sellTargets = openOrders
+    .filter(o => o.type === 'sell' && o.targetPrice < currentPrice)
+    .map(o => o.targetPrice as number);
+
+  // Neutral base — no natural drift toward 0
+  let upProb = 0.50;
+
+  // Bounce hard upward when approaching the floor (minValue)
+  if (floorPrice > 0) {
+    const distToFloor = (currentPrice - floorPrice) / currentPrice; // 0 = at floor
+    if (distToFloor <= 0.03)       upProb = 0.92; // almost at floor — strong bounce
+    else if (distToFloor <= 0.08)  upProb = 0.78;
+    else if (distToFloor <= 0.15)  upProb = 0.65;
+  }
+
+  // BUY orders approaching target: bias downward to delay win naturally
+  if (buyTargets.length > 0) {
+    const nearestBuyTarget = Math.min(...buyTargets);
+    const proximity = currentPrice / nearestBuyTarget;
+    if (proximity >= 0.97)       upProb = 0.10;
+    else if (proximity >= 0.93)  upProb = 0.22;
+    else if (proximity >= 0.88)  upProb = 0.35;
+    else if (proximity >= 0.80)  upProb = 0.42;
+  }
+
+  // SELL orders approaching target: bias upward to delay win naturally
+  if (sellTargets.length > 0) {
+    const nearestSellTarget = Math.max(...sellTargets);
+    const proximity = nearestSellTarget / currentPrice;
+    if (proximity >= 0.97)       upProb = 0.90;
+    else if (proximity >= 0.93)  upProb = 0.78;
+    else if (proximity >= 0.88)  upProb = 0.65;
+    else if (proximity >= 0.80)  upProb = 0.58;
+  }
+
+  const direction = Math.random() < upProb ? 1 : -1;
+  const next = currentPrice + direction * moveAmount;
+
+  // Hard floor — price never drops below minValue naturally
+  const hardFloor = floorPrice > 0 ? floorPrice : 0.0001;
+  return Math.max(hardFloor, parseFloat(next.toFixed(6)));
+};
+
+const closeSingleOrderAsLoss = async (io: Server, order: any): Promise<void> => {
+  const user = await User.findById(order.userId);
+  order.status = 'closed';
+  order.closedAt = new Date();
+  order.profit = 0;
+  order.won = false;
+  await order.save();
+  console.log(`[PriceSimulator] Order ${order._id} — LOSS (price crashed to 0 / pair deactivated)`);
+  io.to(`user:${order.userId.toString()}`).emit('order_closed', {
+    orderId: order._id,
+    won: false,
+    profit: 0,
+    newBalance: parseFloat((user?.balance ?? 0).toFixed(2)),
+  });
+};
+
+const settleOrders = async (io: Server, currentPrice: number, orders: any[]): Promise<void> => {
   for (const order of orders) {
-    const ageMs = now - new Date(order.createdAt).getTime();
-
-    // Must stay open for at least 48 hours
-    if (ageMs < MIN_HOLD_MS) continue;
-
-    let closed = false;
-    let won    = false;
+    let won = false;
     let profit = 0;
+    let closed = false;
 
-    // ── FORCE CLOSE at 72 hours — loss ─────────────────────────────────────
-    if (ageMs >= MAX_HOLD_MS) {
-      closed = true;
-      won    = false;
-    }
-
-    // ── LOSS: price hit the minimum floor ──────────────────────────────────
-    else if (currentPrice <= minValue) {
-      closed = true;
-      won    = false;
-    }
-
-    // ── WIN: BUY — user expects price to RISE to target ────────────────────
-    else if (order.type === 'buy' && currentPrice >= order.targetPrice) {
+    if (order.type === 'buy' && currentPrice >= order.targetPrice) {
       profit = ((order.targetPrice - order.price) / order.price) * order.amount;
-      if (profit > 0) { closed = true; won = true; }
-    }
-
-    // ── WIN: SELL — user expects price to DROP to target ───────────────────
-    else if (order.type === 'sell' && currentPrice <= order.targetPrice) {
+      // Guard: if target was set below entry (bad order), use actual price movement
+      if (profit <= 0) profit = ((currentPrice - order.price) / order.price) * order.amount;
+      profit = Math.max(0, profit);
+      closed = true;
+      won = true;
+    } else if (order.type === 'sell' && currentPrice <= order.targetPrice) {
       profit = ((order.price - order.targetPrice) / order.price) * order.amount;
-      if (profit > 0) { closed = true; won = true; }
+      // Guard: if target was set above entry (bad order), use actual price movement
+      if (profit <= 0) profit = ((order.price - currentPrice) / order.price) * order.amount;
+      profit = Math.max(0, profit);
+      closed = true;
+      won = true;
     }
 
     if (!closed) continue;
 
     const user = await User.findById(order.userId);
-    if (user && won && profit > 0) {
-      user.balance += profit;
+    const roundedProfit = parseFloat(profit.toFixed(2));
+
+    // Return original investment + profit on win
+    if (user) {
+      user.balance += order.amount + roundedProfit;
       await user.save();
     }
 
-    order.status   = 'closed';
+    order.status = 'closed';
     order.closedAt = new Date();
+    order.profit = roundedProfit;
+    order.won = true;
     await order.save();
 
-    const roundedProfit = parseFloat(profit.toFixed(2));
-    console.log(
-      `[PriceSimulator] Order ${order._id} — ` +
-      `${won ? `WIN +$${roundedProfit}` : 'LOSS'} | ` +
-      `price: ${currentPrice} | target: ${order.targetPrice} | type: ${order.type}`
-    );
-
+    console.log(`[PriceSimulator] Order ${order._id} — WIN +$${roundedProfit} | price: ${currentPrice} | target: ${order.targetPrice} | type: ${order.type}`);
     io.to(`user:${order.userId.toString()}`).emit('order_closed', {
       orderId: order._id,
-      won,
+      won: true,
       profit: roundedProfit,
       newBalance: parseFloat((user?.balance ?? 0).toFixed(2)),
     });

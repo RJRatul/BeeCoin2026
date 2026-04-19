@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import PrivateLayout from "@/layouts/PrivateLayout";
 import { FaEnvelope, FaCopy, FaCheck } from "react-icons/fa";
 
-const SUPPORT_EMAIL = "beecoin.aitrading@gmail.com";
+const SUPPORT_EMAIL = "support@cryptax.live";
 
 export default function SupportPage() {
   const { user } = useAuth();
@@ -19,7 +19,7 @@ export default function SupportPage() {
 
   const getMailToLink = () => {
     const subject = `Support Request: ${user?.email || ""}`;
-    const body = `Hello BeeCoin Support,\n\nI need assistance with my account.\n\nRegistered Email: ${user?.email || "N/A"}\nUser ID: ${user?.id || "N/A"}\n\nThank you.`;
+    const body = `Hello Cryptax Support,\n\nI need assistance with my account.\n\nRegistered Email: ${user?.email || "N/A"}\nUser ID: ${user?.id || "N/A"}\n\nThank you.`;
     return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 

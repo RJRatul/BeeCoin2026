@@ -78,7 +78,7 @@ export default function RegisterForm() {
           {/* Logo and heading */}
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              Create your BeeCoin account
+              Create your Cryptax account
             </h2>
             <p className="mt-2 text-sm text-gray-400">
               Join the next generation ALGO-powered trading platform

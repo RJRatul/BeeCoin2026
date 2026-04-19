@@ -8,9 +8,9 @@ import { Toaster } from "react-hot-toast";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "BeeCoin - Meme Coins Trading Platform",
+  title: "Cryptax - Live Crypto Trading Platform",
   description:
-    "Discover and trade the most exciting meme coins. Join the community-driven revolution in cryptocurrency trading with BeeCoin.",
+    "Trade live cryptocurrencies in real time. Join thousands of traders on Cryptax — the fast, reliable platform for Bitcoin, Ethereum, Solana and more.",
 };
 
 export default function RootLayout({
@@ -24,7 +24,14 @@ export default function RootLayout({
         <AuthProvider>
           <PriceProvider>
             {children}
-            <Toaster position="top-right" />
+            <Toaster
+              position="top-right"
+              containerStyle={{ zIndex: 99999 }}
+              toastOptions={{
+                duration: 6000,
+                style: { background: '#1f2937', color: '#fff', border: '1px solid #374151' },
+              }}
+            />
           </PriceProvider>
         </AuthProvider>
       </body>

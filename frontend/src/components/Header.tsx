@@ -56,14 +56,14 @@ export default function Header() {
             <div className="w-20 h-10 relative mr-2 flex-shrink-0">
               <Image
                 src="/logo.png"
-                alt="BeeCoin Logo"
+                alt="Cryptax Logo"
                 fill
                 className="object-contain"
                 priority
               />
             </div>
             <span className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-green-400 to-yellow-400 bg-clip-text text-transparent whitespace-nowrap">
-              BeeCoin
+              Cryptax
             </span>
           </Link>
 

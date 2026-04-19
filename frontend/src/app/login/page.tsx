@@ -66,13 +66,13 @@ export default function LoginPage() {
   };
 
   const getEmailBody = () => {
-    return `Hello BeeCoin Support,\n\nI have forgotten my password and need assistance resetting it.\n\nMy email address is: ${email}\n\nPlease help me reset my password.\n\nThank you.`;
+    return `Hello Cryptax Support,\n\nI have forgotten my password and need assistance resetting it.\n\nMy email address is: ${email}\n\nPlease help me reset my password.\n\nThank you.`;
   };
 
   const getMailToLink = () => {
     const subject = getEmailSubject();
     const body = getEmailBody();
-    return `mailto:beecoin.aitrading@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    return `mailto:support@cryptax.live?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
   return (
@@ -93,7 +93,7 @@ export default function LoginPage() {
           {/* Logo and heading */}
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              Sign in to BeeCoin
+              Sign in to Cryptax
             </h2>
             <p className="mt-2 text-sm text-gray-400">
               Access your ALGO-powered trading dashboard
@@ -203,7 +203,7 @@ export default function LoginPage() {
                 </div>
                 <div className="relative flex justify-center text-sm">
                   <span className="px-2 bg-gray-800 text-gray-400">
-                    New to BeeCoin?
+                    New to Cryptax?
                   </span>
                 </div>
               </div>
@@ -255,7 +255,7 @@ export default function LoginPage() {
                     </span>
                     <button
                       onClick={() =>
-                        copyToClipboard("beecoin.aitrading@gmail.com")
+                        copyToClipboard("support@cryptax.live")
                       }
                       className="cursor-pointer flex items-center space-x-1 text-blue-400 hover:text-blue-300 transition-colors text-sm"
                     >
@@ -273,7 +273,7 @@ export default function LoginPage() {
                     </button>
                   </div>
                   <code className="text-blue-400 text-sm break-all">
-                    beecoin.aitrading@gmail.com
+                    support@cryptax.live
                   </code>
                 </div>
 
@@ -322,7 +322,7 @@ export default function LoginPage() {
                     <li>Open your email client manually</li>
                     <li>
                       Send email to:{" "}
-                      <strong>beecoin.aitrading@gmail.com</strong>
+                      <strong>support@cryptax.live</strong>
                     </li>
                     <li>
                       Subject:{" "}
