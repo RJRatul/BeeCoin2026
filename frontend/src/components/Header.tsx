@@ -46,14 +46,14 @@ export default function Header() {
       className={`relative w-full top-0 z-50 transition-all duration-300 ${
         isScrolled
           ? 'bg-gray-900/95 backdrop-blur-md border-b border-green-700/30 py-2'
-          : 'bg-gray-900/90 backdrop-blur-sm border-b border-green-800/30 py-3'
+          : 'bg-gray-900/90 backdrop-blur-sm border-b border-green-800/30'
       }`}
     >
       <nav className="container mx-auto px-4">
         <div className="flex justify-between items-center">
           {/* Logo */}
           <Link href="/" className="flex items-center z-50">
-            <div className="w-20 h-10 relative mr-2 flex-shrink-0">
+            <div className="w-20 h-20 relative mr-2 flex-shrink-0">
               <Image
                 src="/logo.png"
                 alt="Cryptax Logo"
@@ -62,9 +62,6 @@ export default function Header() {
                 priority
               />
             </div>
-            <span className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-green-400 to-yellow-400 bg-clip-text text-transparent whitespace-nowrap">
-              Cryptax
-            </span>
           </Link>
 
           {/* Desktop Navigation */}

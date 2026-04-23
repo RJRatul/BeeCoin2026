@@ -44,7 +44,7 @@ export default function TradingPairsPage() {
 
   const fetchPairs = async () => {
     try {
-      const response = await axios.get('/api/pairs');
+      const response = await axios.get('/api/pairs/all');
       setPairs(response.data.pairs);
     } catch (error) {
       console.error('Error fetching pairs:', error);

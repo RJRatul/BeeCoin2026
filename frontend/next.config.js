@@ -10,6 +10,17 @@ const nextConfig = {
         pathname: '/uploads/**',
       },
       {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '3001',
+        pathname: '/uploads/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'assets.coingecko.com',
+        pathname: '/coins/images/**',
+      },
+      {
         protocol: 'https',
         hostname: 'cryptax.live',
         pathname: '/uploads/**',
@@ -32,11 +43,15 @@ const nextConfig = {
     ],
   },
   // Your existing rewrites if any
-  async rewrites() { 
+  async rewrites() {
     return [
       {
         source: '/api/:path*',
         destination: 'http://localhost:5000/api/:path*',
+      },
+      {
+        source: '/uploads/:path*',
+        destination: 'http://localhost:5000/uploads/:path*',
       },
     ];
   },

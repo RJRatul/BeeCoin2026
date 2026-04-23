@@ -62,11 +62,20 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
     return amount * pair.currentValue;
   };
 
+  // Resolve relative /uploads/ image paths to full backend URL
+  const resolveImage = (image: string): string => {
+    if (!image || image.startsWith('http')) return image;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    const base = apiUrl.startsWith('http') ? apiUrl.replace(/\/api$/, '') : '';
+    return `${base}${image}`;
+  };
+
   const fetchPairs = async (): Promise<Pair[]> => {
     try {
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || '/api'}/pairs`);
       const loaded: Pair[] = response.data.pairs.map((pair: Pair) => ({
         ...pair,
+        image: resolveImage(pair.image),
         holdings: getRandomHoldings(pair.symbol),
         holdingsValue: calculateHoldingsValue(pair),
       }));

@@ -33,6 +33,31 @@ interface MarketDepth {
   type: "green" | "gray" | "red";
 }
 
+function PairRow({ p, current, onClick }: { p: any; current: string; onClick: (s: string) => void }) {
+  const pct = (((p.currentValue - (p.minValue + p.maxValue) / 2) / ((p.minValue + p.maxValue) / 2)) * 100).toFixed(2);
+  const up = p.currentValue > (p.minValue + p.maxValue) / 2;
+  return (
+    <button
+      onClick={() => onClick(p.symbol)}
+      className={`w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-700 transition-colors ${p.symbol === current ? "bg-gray-700/50" : ""}`}
+    >
+      <div className="w-7 h-7 bg-gray-700 rounded-full flex items-center justify-center flex-shrink-0">
+        {p.image
+          ? <Image src={p.image} alt={p.name} width={20} height={20} className="rounded-full" />
+          : <span className="text-[10px] font-bold">{p.symbol.charAt(0)}</span>}
+      </div>
+      <div className="flex-1 text-left min-w-0">
+        <div className="text-white text-xs font-medium truncate">{p.name}</div>
+        <div className="text-gray-400 text-[10px]">{p.symbol}/USD</div>
+      </div>
+      <div className="text-right flex-shrink-0">
+        <div className="text-white text-xs font-semibold">${p.currentValue.toLocaleString()}</div>
+        <div className={`text-[10px] ${up ? "text-green-400" : "text-red-400"}`}>{up ? "+" : ""}{pct}%</div>
+      </div>
+    </button>
+  );
+}
+
 export default function TradePairPage() {
   const { symbol } = useParams();
   const router = useRouter();
@@ -394,6 +419,8 @@ export default function TradePairPage() {
   const availablePairs = pairs.filter(
     (p) => p.isActive && !(p.minValue === 0 && p.maxValue === 0)
   );
+  const recommendedPairs = availablePairs.filter((p) => p.isRecommended).slice(0, 5);
+  const otherPairs = availablePairs.filter((p) => !p.isRecommended);
 
   return (
     <PrivateLayout>
@@ -429,29 +456,28 @@ export default function TradePairPage() {
             </button>
 
             {showMarketDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 rounded-xl z-30 shadow-2xl border border-gray-700 max-h-60 overflow-y-auto">
-                {availablePairs.map((p: any) => (
-                  <button
-                    key={p._id}
-                    onClick={() => handleMarketChange(p.symbol)}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-700 transition-colors ${p.symbol === pair.symbol ? "bg-gray-700/50" : ""}`}
-                  >
-                    <div className="w-7 h-7 bg-gray-700 rounded-full flex items-center justify-center flex-shrink-0">
-                      {p.image
-                        ? <Image src={p.image} alt={p.name} width={20} height={20} className="rounded-full" />
-                        : <span className="text-[10px] font-bold">{p.symbol.charAt(0)}</span>}
+              <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 rounded-xl z-30 shadow-2xl border border-gray-700 max-h-64 overflow-y-auto">
+
+                {/* Recommended section */}
+                {recommendedPairs.length > 0 && (
+                  <>
+                    <div className="px-3 py-1.5 bg-gray-900/60 border-b border-gray-700/50">
+                      <span className="text-[9px] text-yellow-400 font-bold uppercase tracking-wider">⭐ Recommended</span>
                     </div>
-                    <div className="flex-1 text-left min-w-0">
-                      <div className="text-white text-xs font-medium truncate">{p.name}</div>
-                      <div className="text-gray-400 text-[10px]">{p.symbol}/USD</div>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <div className="text-white text-xs font-semibold">${p.currentValue.toLocaleString()}</div>
-                      <div className={`text-[10px] ${p.currentValue > (p.minValue + p.maxValue) / 2 ? "text-green-400" : "text-red-400"}`}>
-                        {(((p.currentValue - (p.minValue + p.maxValue) / 2) / ((p.minValue + p.maxValue) / 2)) * 100).toFixed(2)}%
+                    {recommendedPairs.map((p: any) => (
+                      <PairRow key={p._id} p={p} current={pair.symbol} onClick={handleMarketChange} />
+                    ))}
+                    {otherPairs.length > 0 && (
+                      <div className="px-3 py-1.5 bg-gray-900/60 border-y border-gray-700/50">
+                        <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">All Markets</span>
                       </div>
-                    </div>
-                  </button>
+                    )}
+                  </>
+                )}
+
+                {/* Remaining pairs */}
+                {otherPairs.map((p: any) => (
+                  <PairRow key={p._id} p={p} current={pair.symbol} onClick={handleMarketChange} />
                 ))}
               </div>
             )}

@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getPairs,
+  getAllPairs,
   getRecommendedPairs,
   createPair,
   updatePair,
@@ -12,6 +13,7 @@ import { protect, admin } from '../middleware/auth';
 const router = express.Router();
 
 router.get('/', getPairs);
+router.get('/all', getAllPairs); // includes inactive pairs (for admin UI)
 router.get('/recommended', getRecommendedPairs);
 router.post('/', protect, admin, createPair);
 router.put('/:id', protect, admin, updatePair);

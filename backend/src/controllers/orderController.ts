@@ -148,38 +148,33 @@ export const checkOpenOrders = async (io?: SocketServer): Promise<void> => {
 
       if (order.type === 'buy') {
         if (currentPrice >= order.targetPrice) {
-          profit = ((order.targetPrice - order.price) / order.price) * order.amount;
-          if (profit <= 0) profit = ((currentPrice - order.price) / order.price) * order.amount;
-          profit = Math.max(0, profit);
           closed = true; won = true;
         }
-        // No natural loss — price is floored at minValue by the simulator
       } else if (order.type === 'sell') {
         if (currentPrice <= order.targetPrice) {
-          profit = ((order.price - order.targetPrice) / order.price) * order.amount;
-          if (profit <= 0) profit = ((order.price - currentPrice) / order.price) * order.amount;
-          profit = Math.max(0, profit);
           closed = true; won = true;
         }
-        // No natural loss — price is floored at minValue by the simulator
       }
 
       if (!closed) continue;
 
+      // Profit = invested amount (100% flat return)
+      profit = won ? order.amount : 0;
+
       const user = await User.findById(order.userId);
-      const roundedProfit = parseFloat(profit.toFixed(2));
 
       if (user && won) {
-        user.balance += order.amount + roundedProfit;
+        // Return investment + equal profit (balance was already deducted on order creation)
+        user.balance += order.amount + profit;
         await user.save();
-        console.log(`[Cron] Order ${order._id} WIN — profit: $${roundedProfit}, new balance: $${user.balance.toFixed(2)}`);
+        console.log(`[Cron] Order ${order._id} ✅ WIN — profit: $${profit}, new balance: $${user.balance.toFixed(2)}`);
       } else {
-        console.log(`[Cron] Order ${order._id} LOSS`);
+        console.log(`[Cron] Order ${order._id} ❌ LOSS — $${order.amount} lost`);
       }
 
       order.status   = 'closed';
       order.closedAt = new Date();
-      order.profit   = won ? roundedProfit : 0;
+      order.profit   = profit;
       order.won      = won;
       await order.save();
 
@@ -187,7 +182,7 @@ export const checkOpenOrders = async (io?: SocketServer): Promise<void> => {
         io.to(`user:${order.userId.toString()}`).emit('order_closed', {
           orderId: order._id,
           won,
-          profit: roundedProfit,
+          profit,
           newBalance: parseFloat((user?.balance ?? 0).toFixed(2)),
         });
       }

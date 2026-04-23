@@ -15,6 +15,7 @@ import orderRoutes from './routes/orderRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { checkOpenOrders } from './controllers/orderController';
 import { startPriceSimulator } from './services/priceSimulator';
+import pushRoutes from './routes/pushRoutes';
 
 dotenv.config();
 
@@ -90,6 +91,7 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api', uploadRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/push', pushRoutes);
 
 // Error Handler
 app.use(errorHandler);

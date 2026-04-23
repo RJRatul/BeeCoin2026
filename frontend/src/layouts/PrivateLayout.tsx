@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import AuthGuard from "@/components/AuthGuard";
 import AccountSuspended from "@/components/AccountSuspended";
 import { usePathname } from "next/navigation";
@@ -24,8 +25,10 @@ import { createPortal } from "react-dom";
 
 export default function PrivateLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
   const pathname = usePathname();
+
+  usePushNotifications(token ?? null);
 
   // Tooltip state
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
@@ -104,7 +107,7 @@ export default function PrivateLayout({ children }: { children: React.ReactNode 
             {/* Logo */}
             <div className="flex items-center justify-center h-20 px-2 bg-gray-900 border-b border-gray-700">
               <div className="flex flex-col items-center space-y-1">
-                <div className="w-14 h-10 relative">
+                <div className="w-20 h-20 relative">
                   <Image 
                     src="/logo.png" 
                     alt="Cryptax Logo"
@@ -113,9 +116,6 @@ export default function PrivateLayout({ children }: { children: React.ReactNode 
                     priority
                   />
                 </div>
-                <span className="text-xs font-bold bg-gradient-to-r from-green-400 to-yellow-400 bg-clip-text text-transparent text-center leading-tight">
-                  Cryptax
-                </span>
               </div>
             </div>
 

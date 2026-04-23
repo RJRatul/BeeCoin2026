@@ -49,7 +49,8 @@ router.post('/upload', protect, admin, upload.single('image'), (req: any, res: a
       return res.status(400).json({ message: 'No file uploaded' });
     }
     
-    const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    // Store as relative path so it works across environments (localhost + production)
+    const imageUrl = `/uploads/${req.file.filename}`;
     res.json({ success: true, imageUrl });
   } catch (error: any) {
     console.error('Upload error:', error);
