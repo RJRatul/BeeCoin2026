@@ -13,7 +13,6 @@ import {
   FaSignOutAlt,
   FaUser,
   FaWallet,
-  FaGift,
   FaChartLine,
   FaBars,
   FaTimes,

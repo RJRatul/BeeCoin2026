@@ -422,89 +422,83 @@ export default function TradePairPage() {
   const recommendedPairs = availablePairs.filter((p) => p.isRecommended).slice(0, 5);
   const otherPairs = availablePairs.filter((p) => !p.isRecommended);
 
+  const orderBookBuys  = marketDepth.filter(d => d.type === "green");
+  const orderBookSells = marketDepth.filter(d => d.type === "red");
+
   return (
     <PrivateLayout>
-      <div className="bg-gradient-to-br from-gray-900 to-black p-2.5 pb-6 space-y-2 max-w-2xl mx-auto">
-
-        {/* ── Row 1: Back · Pair Dropdown · Price ───────────────────── */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => router.replace("/trade")}
-            className="p-1.5 text-gray-400 hover:text-white transition flex-shrink-0"
-          >
-            <FaArrowLeft className="w-3.5 h-3.5" />
+      {/* Uses dynamic viewport height minus the 64px header */}
+      <div
+        className="flex flex-col bg-gray-900 overflow-hidden w-full"
+        style={{ height: "calc(100dvh - 64px)" }}
+      >
+        {/* ── Header ──────────────────────────────────────────────────── */}
+        <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-gray-900 border-b border-gray-800">
+          <button onClick={() => router.replace("/trade")} className="text-gray-400 hover:text-white flex-shrink-0">
+            <FaArrowLeft className="w-4 h-4" />
           </button>
 
-          {/* Pair dropdown */}
+          {/* Pair selector */}
           <div className="relative flex-1 min-w-0">
             <button
               onClick={() => setShowMarketDropdown(!showMarketDropdown)}
-              className="w-full flex items-center justify-between bg-gray-800/70 hover:bg-gray-700/70 rounded-xl px-2.5 py-1.5 transition"
+              className="flex items-center gap-2 min-w-0"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-6 h-6 bg-gray-700 rounded-full flex items-center justify-center flex-shrink-0">
-                  {pair.image
-                    ? <Image src={pair.image} alt={pair.name} width={18} height={18} className="rounded-full" />
-                    : <span className="text-[10px] font-bold">{pair.symbol.charAt(0)}</span>}
-                </div>
-                <div className="text-left min-w-0">
-                  <div className="text-white font-semibold text-xs leading-tight truncate">{pair.name}</div>
-                  <div className="text-gray-400 text-[10px] leading-tight">{pair.symbol}/USD</div>
-                </div>
+              <div className="w-7 h-7 bg-gray-700 rounded-full flex items-center justify-center flex-shrink-0">
+                {pair.image
+                  ? <Image src={pair.image} alt={pair.name} width={22} height={22} className="rounded-full" />
+                  : <span className="text-[10px] font-bold text-white">{pair.symbol.charAt(0)}</span>}
               </div>
-              <FaChevronDown className={`w-3 h-3 text-gray-400 flex-shrink-0 ml-1 transition-transform ${showMarketDropdown ? "rotate-180" : ""}`} />
+              <div className="text-left min-w-0">
+                <div className="text-white font-bold text-sm leading-tight">{pair.symbol}<span className="text-gray-500 font-normal">/USDT</span></div>
+              </div>
+              <FaChevronDown className={`w-3 h-3 text-gray-400 flex-shrink-0 transition-transform ${showMarketDropdown ? "rotate-180" : ""}`} />
             </button>
 
             {showMarketDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 rounded-xl z-30 shadow-2xl border border-gray-700 max-h-64 overflow-y-auto">
-
-                {/* Recommended section */}
+              <div className="absolute top-full left-0 mt-2 w-64 bg-gray-800 rounded-xl z-50 shadow-2xl border border-gray-700 max-h-64 overflow-y-auto">
                 {recommendedPairs.length > 0 && (
                   <>
-                    <div className="px-3 py-1.5 bg-gray-900/60 border-b border-gray-700/50">
+                    <div className="px-3 py-1.5 border-b border-gray-700/50">
                       <span className="text-[9px] text-yellow-400 font-bold uppercase tracking-wider">⭐ Recommended</span>
                     </div>
-                    {recommendedPairs.map((p: any) => (
-                      <PairRow key={p._id} p={p} current={pair.symbol} onClick={handleMarketChange} />
-                    ))}
+                    {recommendedPairs.map((p: any) => <PairRow key={p._id} p={p} current={pair.symbol} onClick={handleMarketChange} />)}
                     {otherPairs.length > 0 && (
-                      <div className="px-3 py-1.5 bg-gray-900/60 border-y border-gray-700/50">
+                      <div className="px-3 py-1.5 border-y border-gray-700/50">
                         <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">All Markets</span>
                       </div>
                     )}
                   </>
                 )}
-
-                {/* Remaining pairs */}
-                {otherPairs.map((p: any) => (
-                  <PairRow key={p._id} p={p} current={pair.symbol} onClick={handleMarketChange} />
-                ))}
+                {otherPairs.map((p: any) => <PairRow key={p._id} p={p} current={pair.symbol} onClick={handleMarketChange} />)}
               </div>
             )}
           </div>
 
-          {/* Live price */}
+          {/* Live price + change */}
           <div className="text-right flex-shrink-0">
-            <div className="text-white font-bold text-sm leading-tight">${livePrice.toLocaleString()}</div>
-            <div className={`text-[10px] font-medium leading-tight ${isPositive ? "text-green-400" : "text-red-400"}`}>
-              {isPositive ? "+" : ""}{percentageChange}%
+            <div className={`font-bold text-base leading-tight ${isPositive ? "text-green-400" : "text-red-400"}`}>
+              ${livePrice.toLocaleString()}
+            </div>
+            <div className={`text-[10px] leading-tight ${isPositive ? "text-green-400" : "text-red-400"}`}>
+              {isPositive ? "▲" : "▼"} {percentageChange}%
             </div>
           </div>
         </div>
 
-        {/* ── Row 2: Balance + market stats ─────────────────────────── */}
-        <div className={`flex items-center justify-between rounded-xl px-3 py-2 transition-all duration-700 ${
+        {/* ── Stats bar ───────────────────────────────────────────────── */}
+        <div className={`flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-800 transition-all duration-700 ${
           openOrder && livePrice > openOrder.price ? "trade-card-profit"
           : openOrder && livePrice <= openOrder.price ? "trade-card-loss"
-          : "bg-gray-800/50"
+          : "bg-gray-850"
         }`}>
           <div>
-            <div className="text-[10px] text-gray-400 leading-tight">Available Balance</div>
-            <div className="text-white font-bold text-lg leading-tight">${user?.balance?.toLocaleString() || "0.00"}</div>
+            <div className="text-[9px] text-gray-500 uppercase tracking-wide">Balance</div>
+            <div className="text-white font-bold text-sm">${(user?.balance ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </div>
           <div className="flex gap-4">
             <div className="text-center">
-              <div className="text-[9px] text-gray-500">24h Low</div>
+              <div className="text-[9px] text-gray-500">Low</div>
               <div className="text-xs text-red-400 font-semibold">${pair.minValue.toLocaleString()}</div>
             </div>
             <div className="text-center">
@@ -512,195 +506,176 @@ export default function TradePairPage() {
               <div className="text-xs text-white font-semibold">${livePrice.toLocaleString()}</div>
             </div>
             <div className="text-center">
-              <div className="text-[9px] text-gray-500">24h High</div>
+              <div className="text-[9px] text-gray-500">High</div>
               <div className="text-xs text-green-400 font-semibold">${pair.maxValue.toLocaleString()}</div>
             </div>
           </div>
         </div>
 
-        {/* ── Row 3: Buy/Sell tabs ───────────────────────────────────── */}
-        <div className="flex gap-1 bg-gray-800/50 rounded-xl p-0.5">
+        {/* ── Buy / Sell toggle ────────────────────────────────────────── */}
+        <div className="flex-shrink-0 flex mx-3 mt-2 gap-1 bg-gray-800 rounded-xl p-0.5">
           <button
             onClick={() => { setActiveTab("buy"); setTargetPrice(""); setTargetPriceError(""); }}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition ${activeTab === "buy" ? "bg-green-600 text-white" : "text-gray-400 hover:text-white"}`}
-          >
-            Buy
-          </button>
+            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === "buy" ? "bg-green-500 text-white shadow" : "text-gray-400"}`}
+          >Buy</button>
           <button
             onClick={() => { setActiveTab("sell"); setTargetPrice(""); setTargetPriceError(""); }}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition ${activeTab === "sell" ? "bg-red-600 text-white" : "text-gray-400 hover:text-white"}`}
-          >
-            Sell
-          </button>
+            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === "sell" ? "bg-red-500 text-white shadow" : "text-gray-400"}`}
+          >Sell</button>
         </div>
 
-        {/* ── Row 4: Market Depth + Order Form ──────────────────────── */}
-        <div className="flex gap-2">
+        {/* ── Scrollable body ──────────────────────────────────────────── */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-2">
 
-          {/* Market Depth */}
-          <div className="w-[44%] bg-gray-800/50 rounded-xl overflow-hidden">
-            <div className="grid grid-cols-3 gap-1 px-2 py-1.5 bg-gray-700/40 border-b border-gray-600/40">
-              <span className="text-[9px] text-gray-400 font-semibold">Price</span>
-              <span className="text-[9px] text-gray-400 font-semibold text-right">Amt</span>
-              <span className="text-[9px] text-gray-400 font-semibold text-right">Total</span>
-            </div>
-            <div className="overflow-hidden" style={{ maxHeight: "204px" }}>
-              {marketDepth.map((depth, index) => (
-                <div
-                  key={index}
-                  className={`grid grid-cols-3 gap-1 px-2 py-[4px] border-b border-gray-700/20 ${
-                    depth.type === "gray" ? "bg-gray-600/30"
-                    : depth.type === "green" ? "bg-green-500/5"
-                    : "bg-red-500/5"
-                  }`}
-                >
-                  <span className={`text-[10px] font-medium truncate ${
-                    depth.type === "gray" ? "text-gray-100 font-bold"
-                    : depth.type === "green" ? "text-green-400"
-                    : "text-red-400"
-                  }`}>
-                    ${depth.price.toFixed(2)}
-                  </span>
-                  <span className="text-[10px] text-gray-300 text-right truncate">{depth.amount.toFixed(2)}</span>
-                  <span className="text-[10px] text-gray-400 text-right truncate">${depth.total.toFixed(1)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Order Form */}
-          <div className="flex-1 bg-gray-800/50 rounded-xl p-3 flex flex-col gap-2.5">
-
+          {/* Order form */}
+          <div className="bg-gray-800 rounded-2xl p-3 space-y-2.5">
             {/* Target Price */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[10px] text-gray-400 font-medium">Target Price</label>
-                <span className="text-[9px] text-gray-500">
+              <div className="flex justify-between mb-1">
+                <span className="text-xs text-gray-400 font-medium">Target Price</span>
+                <span className="text-[10px] text-gray-600">
                   {activeTab === "buy" ? `> $${livePrice.toLocaleString()}` : `< $${livePrice.toLocaleString()}`}
                 </span>
               </div>
               <input
-                type="number"
-                value={targetPrice}
+                type="number" value={targetPrice}
                 onChange={(e) => { setTargetPrice(e.target.value); setTargetPriceError(""); }}
                 onBlur={(e) => {
-                  const val = e.target.value;
-                  const num = parseFloat(val);
-                  if (!val || isNaN(num)) { setTargetPriceError(""); return; }
-                  if (activeTab === "buy" && num <= livePrice)
-                    setTargetPriceError(`Must be above $${livePrice.toLocaleString()}`);
-                  else if (activeTab === "sell" && num >= livePrice)
-                    setTargetPriceError(`Must be below $${livePrice.toLocaleString()}`);
-                  else if (num < pair.minValue)
-                    setTargetPriceError(`Min $${pair.minValue.toLocaleString()}`);
+                  const num = parseFloat(e.target.value);
+                  if (!e.target.value || isNaN(num)) { setTargetPriceError(""); return; }
+                  if (activeTab === "buy" && num <= livePrice) setTargetPriceError(`Must be above $${livePrice}`);
+                  else if (activeTab === "sell" && num >= livePrice) setTargetPriceError(`Must be below $${livePrice}`);
+                  else if (num < pair.minValue) setTargetPriceError(`Min $${pair.minValue}`);
                   else setTargetPriceError("");
                 }}
-                placeholder={activeTab === "buy" ? "Above current price" : "Below current price"}
-                className={`w-full px-2.5 py-1.5 bg-gray-700 border rounded-lg text-white text-xs focus:outline-none focus:ring-1 focus:ring-purple-500 ${targetPriceError ? "border-red-500" : "border-gray-600"}`}
-                step="0.01"
+                placeholder={activeTab === "buy" ? "Enter price above current" : "Enter price below current"}
+                className={`w-full px-3 py-2.5 bg-gray-700/80 border rounded-xl text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${targetPriceError ? "border-red-500" : "border-gray-600/50"}`}
+                step="0.0001"
               />
-              {targetPriceError
-                ? <p className="text-red-400 text-[10px] mt-0.5 leading-tight">{targetPriceError}</p>
-                : <p className="text-[9px] text-gray-500 mt-0.5 leading-tight">
-                    {activeTab === "buy" ? "Win when price rises to target" : "Win when price drops to target"}
-                  </p>
-              }
+              <p className={`text-[10px] mt-1 ${targetPriceError ? "text-red-400" : "text-gray-600"}`}>
+                {targetPriceError || (activeTab === "buy" ? "Win when price rises to target" : "Win when price drops to target")}
+              </p>
             </div>
 
             {/* Amount */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[10px] text-gray-400 font-medium">Amount (USDT)</label>
-                <span className="text-[9px] text-gray-500">${user?.balance?.toLocaleString() || "0"}</span>
+              <div className="flex justify-between mb-1">
+                <span className="text-xs text-gray-400 font-medium">Amount (USDT)</span>
+                <span className="text-[10px] text-gray-600">Bal: ${(user?.balance ?? 0).toLocaleString()}</span>
               </div>
               <div className="relative">
                 <input
-                  type="number"
-                  value={amount}
+                  type="number" value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
-                  className="w-full px-2.5 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-1 focus:ring-purple-500 pr-9"
+                  className="w-full px-3 py-2.5 bg-gray-700/80 border border-gray-600/50 rounded-xl text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500/50 pr-14"
                   step="0.01"
                 />
-                <button
-                  onClick={() => setAmount((user?.balance || 0).toString())}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 bg-purple-600 text-white text-[9px] rounded font-semibold hover:bg-purple-700 transition"
-                >
-                  Max
+                <button onClick={() => setAmount((user?.balance || 0).toString())}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-purple-600 text-white text-[10px] rounded-lg font-bold">
+                  MAX
                 </button>
               </div>
+            </div>
+
+            {/* Quick % */}
+            <div className="grid grid-cols-4 gap-1.5">
+              {[10, 25, 50, 100].map(pct => (
+                <button key={pct}
+                  onClick={() => setAmount(parseFloat(((user?.balance || 0) * pct / 100).toFixed(2)).toString())}
+                  className="py-1.5 rounded-lg bg-gray-700/60 hover:bg-gray-600 text-gray-400 hover:text-white text-[10px] font-semibold transition border border-gray-700/50">
+                  {pct}%
+                </button>
+              ))}
             </div>
 
             {/* Submit */}
             <button
               onClick={handleSubmitOrder}
               disabled={
-                submitting || !!openOrder || !amount ||
-                parseFloat(amount) <= 0 || parseFloat(amount) > (user?.balance || 0) ||
-                !targetPrice || parseFloat(targetPrice) <= 0 || !!targetPriceError ||
+                submitting || !!openOrder || !amount || parseFloat(amount) <= 0 ||
+                parseFloat(amount) > (user?.balance || 0) || !targetPrice ||
+                parseFloat(targetPrice) <= 0 || !!targetPriceError ||
                 (activeTab === "buy" && parseFloat(targetPrice) <= livePrice) ||
                 (activeTab === "sell" && parseFloat(targetPrice) >= livePrice) ||
                 parseFloat(targetPrice) < pair.minValue
               }
-              className={`w-full py-2 rounded-lg text-xs font-bold transition ${
-                activeTab === "buy" ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"
-              } text-white disabled:opacity-40 disabled:cursor-not-allowed`}
+              className={`w-full py-3 rounded-xl text-sm font-bold transition-all ${
+                activeTab === "buy" ? "bg-green-500 hover:bg-green-400" : "bg-red-500 hover:bg-red-400"
+              } text-white disabled:opacity-30 disabled:cursor-not-allowed`}
             >
-              {submitting ? "Processing…" : openOrder ? "Order Active" : `${activeTab === "buy" ? "Buy" : "Sell"} ${pair.symbol}`}
+              {submitting ? "Processing…" : openOrder ? "⏳ Order Active" : `${activeTab === "buy" ? "Buy" : "Sell"} ${pair.symbol}`}
             </button>
           </div>
-        </div>
 
-        {/* ── Row 5: Open Order strip (only when active) ────────────── */}
-        {openOrder && (
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-3 py-2">
-            <div className="flex items-center gap-2">
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
-                openOrder.type === "buy" ? "bg-green-600/30 text-green-400" : "bg-red-600/30 text-red-400"
-              }`}>
-                {openOrder.type.toUpperCase()}
-              </span>
-              <div className="flex flex-1 justify-around">
-                <div className="text-center">
-                  <div className="text-[9px] text-gray-500 leading-tight">Invested</div>
-                  <div className="text-xs text-white font-semibold leading-tight">${openOrder.amount.toLocaleString()}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-[9px] text-gray-500 leading-tight">Entry</div>
-                  <div className="text-xs text-white font-semibold leading-tight">${openOrder.price.toLocaleString()}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-[9px] text-gray-500 leading-tight">Target</div>
-                  <div className="text-xs text-yellow-400 font-semibold leading-tight">${openOrder.targetPrice.toLocaleString()}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-[9px] text-gray-500 leading-tight">Now</div>
-                  <div className={`text-xs font-semibold leading-tight ${
-                    openOrder.type === "buy"
-                      ? livePrice >= openOrder.targetPrice ? "text-green-400"
-                        : livePrice > openOrder.price ? "text-green-300" : "text-red-400"
-                      : livePrice <= openOrder.targetPrice ? "text-green-400"
-                        : livePrice < openOrder.price ? "text-green-300" : "text-red-400"
-                  }`}>${livePrice.toLocaleString()}</div>
-                </div>
+          {/* Active order strip */}
+          {openOrder && (
+            <div className={`rounded-2xl px-3 py-2.5 border ${
+              openOrder.type === "buy" ? "bg-green-500/5 border-green-500/20" : "bg-red-500/5 border-red-500/20"
+            }`}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  openOrder.type === "buy" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                }`}>{openOrder.type.toUpperCase()}</span>
+                <span className="text-[10px] text-gray-500">Active Order</span>
               </div>
-            </div>
-            {/* Progress bar toward target */}
-            <div className="mt-1.5 h-1 bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-700 ${openOrder.type === "buy" ? "bg-green-500" : "bg-red-500"}`}
-                style={{
-                  width: `${Math.min(100, Math.max(0,
+              <div className="grid grid-cols-4 gap-1">
+                {[
+                  { label: "Invested", value: `$${openOrder.amount}`, cls: "text-white" },
+                  { label: "Entry", value: `$${openOrder.price}`, cls: "text-white" },
+                  { label: "Target", value: `$${openOrder.targetPrice}`, cls: "text-yellow-400" },
+                  { label: "Now", value: `$${livePrice}`, cls: openOrder.type === "buy"
+                      ? livePrice >= openOrder.targetPrice ? "text-green-400" : livePrice > openOrder.price ? "text-green-300" : "text-red-400"
+                      : livePrice <= openOrder.targetPrice ? "text-green-400" : livePrice < openOrder.price ? "text-green-300" : "text-red-400" },
+                ].map(item => (
+                  <div key={item.label} className="text-center">
+                    <div className="text-[9px] text-gray-600">{item.label}</div>
+                    <div className={`text-[10px] font-bold ${item.cls}`}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${openOrder.type === "buy" ? "bg-green-500" : "bg-red-500"}`}
+                  style={{ width: `${Math.min(100, Math.max(0,
                     openOrder.type === "buy"
                       ? ((livePrice - openOrder.price) / (openOrder.targetPrice - openOrder.price)) * 100
                       : ((openOrder.price - livePrice) / (openOrder.price - openOrder.targetPrice)) * 100
-                  ))}%`
-                }}
-              />
+                  ))}%` }}
+                />
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
+          {/* Order Book */}
+          <div className="bg-gray-800 rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700/50">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Order Book</span>
+              <span className="text-xs text-white font-bold">${livePrice.toLocaleString()}</span>
+            </div>
+            {/* Column headers */}
+            <div className="grid grid-cols-4 px-3 py-1.5 bg-gray-700/30 border-b border-gray-700/30">
+              <span className="text-[9px] text-green-400 font-semibold col-span-1">Buy Price</span>
+              <span className="text-[9px] text-gray-500 text-right">Amt</span>
+              <span className="text-[9px] text-red-400 font-semibold text-right">Sell Price</span>
+              <span className="text-[9px] text-gray-500 text-right">Amt</span>
+            </div>
+            {/* Rows */}
+            {Array.from({ length: Math.max(orderBookBuys.length, orderBookSells.length) }).map((_, i) => {
+              const buy  = orderBookBuys[i];
+              const sell = orderBookSells[i];
+              return (
+                <div key={i} className="grid grid-cols-4 px-3 py-[5px] border-b border-gray-700/20 last:border-0">
+                  <span className="text-[10px] text-green-400 font-medium">{buy ? `$${buy.price.toFixed(4)}` : ""}</span>
+                  <span className="text-[10px] text-gray-500 text-right">{buy ? buy.amount.toFixed(2) : ""}</span>
+                  <span className="text-[10px] text-red-400 font-medium text-right">{sell ? `$${sell.price.toFixed(4)}` : ""}</span>
+                  <span className="text-[10px] text-gray-500 text-right">{sell ? sell.amount.toFixed(2) : ""}</span>
+                </div>
+              );
+            })}
+          </div>
+
+        </div>{/* end scrollable body */}
       </div>
     </PrivateLayout>
   );
