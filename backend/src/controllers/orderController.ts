@@ -4,6 +4,8 @@ import Order from '../models/Order';
 import User from '../models/User';
 import Pair from '../models/Pair';
 import { AuthRequest } from '../middleware/auth';
+import { TRADE_DURATION_MS } from '../config/tradeConfig';
+import { settleIfExpired, closeAsLossImmediately } from '../services/orderSettlement';
 
 export const createOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -59,7 +61,8 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
       amount,
       price,
       targetPrice,
-      status: 'open'
+      status: 'open',
+      expiresAt: new Date(Date.now() + TRADE_DURATION_MS)
     });
 
     res.status(201).json({ 
@@ -123,69 +126,15 @@ export const checkOpenOrders = async (io?: SocketServer): Promise<void> => {
     for (const order of openOrders) {
       const pair = await Pair.findById(order.pairId);
 
-      // Pair deleted or admin zeroed it — close as loss immediately
+      // Pair deleted or admin zeroed it — close as loss immediately, ignoring the timer
       if (!pair || !pair.isActive || (pair.minValue === 0 && pair.maxValue === 0)) {
-        order.status   = 'closed';
-        order.closedAt = new Date();
-        order.profit   = 0;
-        order.won      = false;
-        await order.save();
-        console.log(`[Cron] Order ${order._id} closed — pair inactive/zeroed — LOSS`);
-        if (io) {
-          const u = await User.findById(order.userId);
-          io.to(`user:${order.userId.toString()}`).emit('order_closed', {
-            orderId: order._id, won: false, profit: 0,
-            newBalance: parseFloat((u?.balance ?? 0).toFixed(2)),
-          });
-        }
+        await closeAsLossImmediately(io, order);
         continue;
       }
 
-      const currentPrice = pair.currentValue;
-      let closed = false;
-      let won = false;
-      let profit = 0;
-
-      if (order.type === 'buy') {
-        if (currentPrice >= order.targetPrice) {
-          closed = true; won = true;
-        }
-      } else if (order.type === 'sell') {
-        if (currentPrice <= order.targetPrice) {
-          closed = true; won = true;
-        }
-      }
-
-      if (!closed) continue;
-
-      // Profit = invested amount (100% flat return)
-      profit = won ? order.amount : 0;
-
-      const user = await User.findById(order.userId);
-
-      if (user && won) {
-        // Return investment + equal profit (balance was already deducted on order creation)
-        user.balance += order.amount + profit;
-        await user.save();
-        console.log(`[Cron] Order ${order._id} ✅ WIN — profit: $${profit}, new balance: $${user.balance.toFixed(2)}`);
-      } else {
-        console.log(`[Cron] Order ${order._id} ❌ LOSS — $${order.amount} lost`);
-      }
-
-      order.status   = 'closed';
-      order.closedAt = new Date();
-      order.profit   = profit;
-      order.won      = won;
-      await order.save();
-
-      if (io) {
-        io.to(`user:${order.userId.toString()}`).emit('order_closed', {
-          orderId: order._id,
-          won,
-          profit,
-          newBalance: parseFloat((user?.balance ?? 0).toFixed(2)),
-        });
-      }
+      // Win/loss is decided by target price vs Low/High, settled once the
+      // fixed 1-minute timer expires — see orderSettlement.ts.
+      await settleIfExpired(io, order, pair);
     }
   } catch (error) {
     console.error('Error checking open orders:', error);

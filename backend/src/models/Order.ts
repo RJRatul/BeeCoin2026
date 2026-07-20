@@ -12,6 +12,7 @@ export interface IOrder extends Document {
   status: 'open' | 'closed' | 'cancelled';
   profit?: number;
   won?: boolean;
+  expiresAt: Date;
   closedAt?: Date;
   createdAt: Date;
 }
@@ -65,6 +66,10 @@ const OrderSchema = new Schema<IOrder>({
   won: {
     type: Boolean,
     default: false
+  },
+  expiresAt: {
+    type: Date,
+    required: true
   },
   closedAt: {
     type: Date

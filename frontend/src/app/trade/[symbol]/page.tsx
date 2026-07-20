@@ -24,6 +24,17 @@ interface Order {
   targetPrice: number;
   status: "open" | "closed" | "cancelled";
   createdAt: string;
+  expiresAt: string;
+}
+
+// Fixed trade duration — must match backend TRADE_DURATION_MS (default 1 min)
+const TRADE_DURATION_MS = 60000;
+
+function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 interface MarketDepth {
@@ -74,6 +85,7 @@ export default function TradePairPage() {
   const [submitting, setSubmitting] = useState(false);
   const [targetPriceError, setTargetPriceError] = useState("");
   const [livePrice, setLivePrice] = useState<number>(0);
+  const [now, setNow] = useState<number>(Date.now());
 
   // Track the symbol we last successfully loaded so we can reset on symbol change
   const loadedSymbolRef = useRef<string | null>(null);
@@ -180,7 +192,18 @@ export default function TradePairPage() {
       await refreshUser();
     }, 3000);
     return () => clearInterval(interval);
-  }, [pair, user]);
+    // Depend on stable primitives, not the full pair/user objects — refreshUser()
+    // replaces the user object every 3s, which would otherwise tear down and
+    // restart this interval (and the socket below) on every single tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pair?.symbol, user?.id]);
+
+  // Live countdown tick for the active order's remaining trade time
+  useEffect(() => {
+    if (!openOrder) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [openOrder]);
 
   // Socket.io — connect when pair and user are ready
   useEffect(() => {
@@ -234,7 +257,10 @@ export default function TradePairPage() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [pair, user]);
+    // Same reasoning as the polling effect above — keep this connection stable
+    // across refreshUser()'s periodic user-object replacement.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pair?.symbol, user?.id]);
 
   // Polling fallback — detect win/loss when socket event is missed
   useEffect(() => {
@@ -347,10 +373,6 @@ export default function TradePairPage() {
       toast.error(`Sell target must be below current price ($${livePrice.toLocaleString()})`);
       return;
     }
-    if (targetPriceNum < pair.minValue) {
-      toast.error(`Target price cannot be below minimum ($${pair.minValue.toLocaleString()})`);
-      return;
-    }
     if (amountNum > (user?.balance || 0)) {
       toast.error("Insufficient balance");
       return;
@@ -425,6 +447,12 @@ export default function TradePairPage() {
   const orderBookBuys  = marketDepth.filter(d => d.type === "green");
   const orderBookSells = marketDepth.filter(d => d.type === "red");
 
+  // Win/loss is decided by target price vs Low/High, not by what the live
+  // price does — so we can show the true outcome for the countdown itself.
+  const willWin = openOrder
+    ? (openOrder.type === "sell" ? openOrder.targetPrice >= pair.minValue : openOrder.targetPrice <= pair.maxValue)
+    : false;
+
   return (
     <PrivateLayout>
       {/* Uses dynamic viewport height minus the 64px header */}
@@ -488,9 +516,7 @@ export default function TradePairPage() {
 
         {/* ── Stats bar ───────────────────────────────────────────────── */}
         <div className={`flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-800 transition-all duration-700 ${
-          openOrder && livePrice > openOrder.price ? "trade-card-profit"
-          : openOrder && livePrice <= openOrder.price ? "trade-card-loss"
-          : "bg-gray-850"
+          openOrder ? (willWin ? "trade-card-profit" : "trade-card-loss") : "bg-gray-850"
         }`}>
           <div>
             <div className="text-[9px] text-gray-500 uppercase tracking-wide">Balance</div>
@@ -545,16 +571,36 @@ export default function TradePairPage() {
                   if (!e.target.value || isNaN(num)) { setTargetPriceError(""); return; }
                   if (activeTab === "buy" && num <= livePrice) setTargetPriceError(`Must be above $${livePrice}`);
                   else if (activeTab === "sell" && num >= livePrice) setTargetPriceError(`Must be below $${livePrice}`);
-                  else if (num < pair.minValue) setTargetPriceError(`Min $${pair.minValue}`);
                   else setTargetPriceError("");
                 }}
                 placeholder={activeTab === "buy" ? "Enter price above current" : "Enter price below current"}
                 className={`w-full px-3 py-2.5 bg-gray-700/80 border rounded-xl text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${targetPriceError ? "border-red-500" : "border-gray-600/50"}`}
                 step="0.0001"
               />
-              <p className={`text-[10px] mt-1 ${targetPriceError ? "text-red-400" : "text-gray-600"}`}>
-                {targetPriceError || (activeTab === "buy" ? "Win when price rises to target" : "Win when price drops to target")}
-              </p>
+              {(() => {
+                const num = parseFloat(targetPrice);
+                const hasNum = !!targetPrice && !isNaN(num);
+                const withinRange = activeTab === "sell" ? num >= pair.minValue : num <= pair.maxValue;
+                if (targetPriceError) {
+                  return <p className="text-[10px] mt-1 text-red-400">{targetPriceError}</p>;
+                }
+                if (hasNum) {
+                  // return (
+                  //   <p className={`text-[10px] mt-1 ${withinRange ? "text-green-400" : "text-red-400"}`}>
+                  //     {withinRange
+                  //       ? `Within ${activeTab === "sell" ? "Low" : "High"} limit — will WIN after 1 min`
+                  //       : `${activeTab === "sell" ? "Below Low" : "Above High"} ($${activeTab === "sell" ? pair.minValue.toLocaleString() : pair.maxValue.toLocaleString()}) — will LOSE after 1 min`}
+                  //   </p>
+                  // );
+                }
+                // return (
+                //   <p className="text-[10px] mt-1 text-gray-600">
+                //     {activeTab === "sell"
+                //       ? `Win if target stays above Low ($${pair.minValue.toLocaleString()})`
+                //       : `Win if target stays below High ($${pair.maxValue.toLocaleString()})`}
+                //   </p>
+                // );
+              })()}
             </div>
 
             {/* Amount */}
@@ -597,8 +643,7 @@ export default function TradePairPage() {
                 parseFloat(amount) > (user?.balance || 0) || !targetPrice ||
                 parseFloat(targetPrice) <= 0 || !!targetPriceError ||
                 (activeTab === "buy" && parseFloat(targetPrice) <= livePrice) ||
-                (activeTab === "sell" && parseFloat(targetPrice) >= livePrice) ||
-                parseFloat(targetPrice) < pair.minValue
+                (activeTab === "sell" && parseFloat(targetPrice) >= livePrice)
               }
               className={`w-full py-3 rounded-xl text-sm font-bold transition-all ${
                 activeTab === "buy" ? "bg-green-500 hover:bg-green-400" : "bg-red-500 hover:bg-red-400"
@@ -619,14 +664,13 @@ export default function TradePairPage() {
                 }`}>{openOrder.type.toUpperCase()}</span>
                 <span className="text-[10px] text-gray-500">Active Order</span>
               </div>
-              <div className="grid grid-cols-4 gap-1">
+              <div className="grid grid-cols-5 gap-1">
                 {[
                   { label: "Invested", value: `$${openOrder.amount}`, cls: "text-white" },
                   { label: "Entry", value: `$${openOrder.price}`, cls: "text-white" },
-                  { label: "Target", value: `$${openOrder.targetPrice}`, cls: "text-yellow-400" },
-                  { label: "Now", value: `$${livePrice}`, cls: openOrder.type === "buy"
-                      ? livePrice >= openOrder.targetPrice ? "text-green-400" : livePrice > openOrder.price ? "text-green-300" : "text-red-400"
-                      : livePrice <= openOrder.targetPrice ? "text-green-400" : livePrice < openOrder.price ? "text-green-300" : "text-red-400" },
+                  { label: "Target", value: `$${openOrder.targetPrice}`, cls: "text-gray-400" },
+                  { label: "Now", value: `$${livePrice}`, cls: "text-white" },
+                  { label: "Time Left", value: formatCountdown(new Date(openOrder.expiresAt).getTime() - now), cls: "text-yellow-400" },
                 ].map(item => (
                   <div key={item.label} className="text-center">
                     <div className="text-[9px] text-gray-600">{item.label}</div>
@@ -634,13 +678,16 @@ export default function TradePairPage() {
                   </div>
                 ))}
               </div>
+              {/* <div className={`mt-2 text-[10px] text-center font-medium ${willWin ? "text-green-400" : "text-red-400"}`}>
+                {willWin
+                  ? `✅ Within ${openOrder.type === "sell" ? "Low" : "High"} limit — will win`
+                  : `⚠️ ${openOrder.type === "sell" ? "Below Low" : "Above High"} limit — will lose`}
+              </div> */}
               <div className="mt-2 h-1.5 bg-gray-700 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all duration-700 ${openOrder.type === "buy" ? "bg-green-500" : "bg-red-500"}`}
+                  className={`h-full rounded-full transition-all duration-700 ${willWin ? "bg-green-500" : "bg-red-500"}`}
                   style={{ width: `${Math.min(100, Math.max(0,
-                    openOrder.type === "buy"
-                      ? ((livePrice - openOrder.price) / (openOrder.targetPrice - openOrder.price)) * 100
-                      : ((openOrder.price - livePrice) / (openOrder.price - openOrder.targetPrice)) * 100
+                    ((now - new Date(openOrder.createdAt).getTime()) / TRADE_DURATION_MS) * 100
                   ))}%` }}
                 />
               </div>

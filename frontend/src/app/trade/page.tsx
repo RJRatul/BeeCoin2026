@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePrice } from '@/contexts/PriceContext';
 import { useRouter } from 'next/navigation';
@@ -8,6 +8,19 @@ import Image from 'next/image';
 import { FaArrowDown, FaQrcode, FaChevronDown, FaChevronUp } from 'react-icons/fa';
 import PrivateLayout from '@/layouts/PrivateLayout';
 import axios from 'axios';
+import toast from 'react-hot-toast';
+import { io as socketIO, Socket } from 'socket.io-client';
+import { playWinSound, playLossSound } from '@/lib/sounds';
+
+// Fixed trade duration — must match backend TRADE_DURATION_MS (default 1 min)
+const TRADE_DURATION_MS = 60000;
+
+function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 export default function TradePage() {
   const { user, token, refreshUser } = useAuth();
@@ -15,6 +28,11 @@ export default function TradePage() {
   const router = useRouter();
   const [showAllOtherPairs, setShowAllOtherPairs] = useState(false);
   const [openOrder, setOpenOrder] = useState<any>(null);
+  const [now, setNow] = useState(Date.now());
+
+  const socketRef = useRef<Socket | null>(null);
+  const prevOpenOrderRef = useRef<any>(null);
+  const notifiedOrderIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
   if (!user) return; // don't run until user is ready
@@ -24,7 +42,90 @@ export default function TradePage() {
     refreshUser();
   }, 3000);
   return () => clearInterval(interval);
-}, [user]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [user?.id]);
+
+  // Live countdown tick for the active order's remaining trade time
+  useEffect(() => {
+    if (!openOrder) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [openOrder]);
+
+  // Socket.io — get win/loss notifications the instant a trade settles,
+  // even while sitting on this page instead of the trade details page.
+  useEffect(() => {
+    if (!user) return;
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    const socketHost = apiUrl.startsWith("http")
+      ? apiUrl.replace("/api", "")
+      : typeof window !== "undefined"
+      ? window.location.origin
+      : "http://localhost:5000";
+
+    const socket = socketIO(socketHost, {
+      transports: ["polling", "websocket"],
+      path: "/socket.io",
+    });
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      socket.emit("join_user", user.id);
+    });
+
+    socket.on(
+      "order_closed",
+      ({ orderId, won, profit }: { orderId: string; won: boolean; profit: number; newBalance: number }) => {
+        if (notifiedOrderIds.current.has(orderId)) return;
+        notifiedOrderIds.current.add(orderId);
+        if (won) {
+          playWinSound();
+          toast.success(`Trade won! +$${profit.toFixed(2)} profit added to balance.`, { duration: 7000 });
+        } else {
+          playLossSound();
+          toast.error("Trade closed — investment lost.", { duration: 7000 });
+        }
+        fetchOpenOrder();
+        refreshUser();
+      }
+    );
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Polling fallback — detect win/loss when the socket event is missed
+  useEffect(() => {
+    const prev = prevOpenOrderRef.current;
+    prevOpenOrderRef.current = openOrder;
+
+    if (prev && !openOrder) {
+      (async () => {
+        try {
+          const res = await axios.get(
+            `${process.env.NEXT_PUBLIC_API_URL || "/api"}/orders/history`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          const closed = res.data.orders?.find((o: any) => o._id === prev._id);
+          if (closed && !notifiedOrderIds.current.has(closed._id)) {
+            notifiedOrderIds.current.add(closed._id);
+            if (closed.won) {
+              playWinSound();
+              toast.success(`Trade won! +$${(closed.profit ?? 0).toFixed(2)} profit added to balance.`, { duration: 7000 });
+            } else {
+              playLossSound();
+              toast.error("Trade closed — investment lost.", { duration: 7000 });
+            }
+            refreshUser();
+          }
+        } catch {/* silent */}
+      })();
+    }
+  }, [openOrder]);
 
   const fetchOpenOrder = async () => {
     try {
@@ -95,19 +196,28 @@ export default function TradePage() {
           <div className="mb-6">
             {(() => {
               const activePair = openOrder ? pairs.find((p: any) => p.symbol === openOrder.pairSymbol) : null;
-              const isProfit = activePair && activePair.currentValue > openOrder?.price;
-              const isLoss = activePair && activePair.currentValue <= openOrder?.price;
+              // Win/loss is decided by target price vs Low/High, not live price movement.
+              const willWin = openOrder && activePair
+                ? (openOrder.type === 'sell' ? openOrder.targetPrice >= activePair.minValue : openOrder.targetPrice <= activePair.maxValue)
+                : false;
+              const timeLeft = openOrder ? new Date(openOrder.expiresAt).getTime() - now : 0;
               return (
                 <div
                   className={`text-center mb-8 rounded-2xl py-7 px-4 transition-all duration-700 ${
-                    isProfit ? 'trade-card-profit' : isLoss ? 'trade-card-loss' : ''
+                    openOrder ? (willWin ? 'trade-card-profit' : 'trade-card-loss') : ''
                   }`}
                 >
                   <h1 className="text-white text-2xl font-bold mb-2">{getUserName()}</h1>
                   <div className="text-white text-4xl font-bold mb-2">
                     ${user?.balance?.toLocaleString() || '0.00'}
                   </div>
-                  <div className="text-green-400 text-lg font-semibold">+5.01%</div>
+                  {openOrder ? (
+                    <div className="flex items-center justify-center gap-2 text-sm font-semibold">
+                      <span className="text-yellow-400">⏳ {formatCountdown(timeLeft)}</span>
+                    </div>
+                  ) : (
+                    <div className="text-green-400 text-lg font-semibold">+5.01%</div>
+                  )}
                 </div>
               );
             })()}
@@ -165,7 +275,7 @@ export default function TradePage() {
                               <h3 className="text-white font-semibold text-base">{pair.name}</h3>
                               {hasOpenOrder && (
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
-                                  ACTIVE ORDER
+                                  ⏳ {formatCountdown(new Date(openOrder.expiresAt).getTime() - now)}
                                 </span>
                               )}
                             </div>
@@ -244,7 +354,7 @@ export default function TradePage() {
                               <h3 className="text-white font-semibold text-base">{pair.name}</h3>
                               {hasOpenOrder && (
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
-                                  ACTIVE ORDER
+                                  ⏳ {formatCountdown(new Date(openOrder.expiresAt).getTime() - now)}
                                 </span>
                               )}
                             </div>

@@ -64,12 +64,16 @@ export const useAuth = () => {
   return context;
 };
 
-const enrichUser = (user: User): User => {
-  if (user.name && !user.firstName) {
-    const parts = user.name.split(" ");
-    return { ...user, firstName: parts[0] || "", lastName: parts.slice(1).join(" ") || "" };
+const enrichUser = (user: any): User => {
+  // Guard against endpoints that return the raw Mongo `_id` instead of `id`
+  // (e.g. a bare Mongoose doc) — losing `id` breaks anything keyed on it,
+  // like the trade page's socket.io "join_user" room membership.
+  const withId: User = { ...user, id: user.id || user._id };
+  if (withId.name && !withId.firstName) {
+    const parts = withId.name.split(" ");
+    return { ...withId, firstName: parts[0] || "", lastName: parts.slice(1).join(" ") || "" };
   }
-  return user;
+  return withId;
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

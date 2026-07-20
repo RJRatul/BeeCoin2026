@@ -91,7 +91,21 @@ export const login = async (req: Request, res: Response) => {
 export const getMe = async (req: AuthRequest, res: Response) => {
   try {
     const user = await User.findById(req.user?._id).select('-password');
-    res.json({ success: true, user });
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        balance: user.balance,
+        role: user.role,
+        status: user.status
+      }
+    });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
