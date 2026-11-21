@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Socket.io requests "/socket.io/?..." — don't 308-redirect away the trailing slash
+  // (a redirected POST breaks the polling transport).
+  skipTrailingSlashRedirect: true,
   images: {
     unoptimized: true,
     remotePatterns: [
@@ -52,6 +55,15 @@ const nextConfig = {
       {
         source: '/uploads/:path*',
         destination: 'http://localhost:5000/uploads/:path*',
+      },
+      // Socket.io (polling transport) — the client connects to the page origin
+      {
+        source: '/socket.io',
+        destination: 'http://localhost:5000/socket.io/',
+      },
+      {
+        source: '/socket.io/:path*',
+        destination: 'http://localhost:5000/socket.io/:path*',
       },
     ];
   },
